@@ -1,0 +1,44 @@
+---
+title: "Methodological paper for area of occupancy assessment"
+author: Damiano Oldoni, Peter Desmet, Quentin Groom
+date: "`r Sys.Date()`"
+site: bookdown::bookdown_site
+github-repo: trias-project/aoo-paper
+output:
+  bookdown::gitbook:
+    split_by: rmd
+    df_print: paged
+    config:
+      search: no
+      sharing:
+        facebook: no
+        twitter: yes
+        all: []
+---
+
+```{r index-setup, include = FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, # Exclude code from output by default
+  warning = FALSE,
+  message = FALSE,
+  rownames.print = FALSE # Option for df_print = paged
+)
+```
+
+# Abstract
+
+## Draft
+
+This paper contains and describes a new method to assess area of occupancy. Developed for the [Tracking Invasive Alien Species (TrIAS) project](http://trias-project.be).
+
+
+# Setup
+
+Load libraries:
+
+```{r echo = TRUE}
+library(tidyverse)      # To do data science
+library(magrittr)       # To use %<>% pipes
+library(here)           # To find files
+library(rgbif)          # To use GBIF services
+```
