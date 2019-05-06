@@ -1,0 +1,5 @@
+# Introduction
+
+> draft
+
+In order to be policy relevant, the Area Of Occupancy (AOO) should be calculated by using one of the reference grids provided by the [European Environment Agency](https://www.eea.europa.eu/data-and-maps/data/eea-reference-grids-2). For each country there are three different resolutions available: 1x1km, 10x10km and 100x100km. The 1x1km grid size provides a resolution which is much finer than the resolution of (part of) the available occurrence data. On the other side, the 10x10km grid is not particularly informative, specially for a small country like Belgium. As shown in ...(citations needed) the AOO is dependent on the grid cell size. Using a very coarse grid would result in overestimating the AOO.
