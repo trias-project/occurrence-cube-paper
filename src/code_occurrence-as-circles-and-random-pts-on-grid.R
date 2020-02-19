@@ -237,7 +237,7 @@ map_circle_in_cell_small_spread <-
 map_circle_in_cell_small_spread
 
 # pick random point in small circle
-# Run code below 238 -  to produce a random assignment
+# Run code below 241 - 295 to produce a random assignment
 random_pt_small_circle <- as(sf_lat_lon_small, "Spatial")
 nrow_df <- nrow(random_pt_small_circle)
 random_pt_small_circle@data <-
@@ -434,10 +434,8 @@ filename_small_spread <- here::here(
 mapshot(map_random_pt_in_cell_small_spread,
         file = filename_small_spread)
 
-
-filenames <- c(filename_small, filename_large, filename_small_spread)
-plots <- map(filenames,
-             function(x){
-               img <- as.raster(readPNG(x))
-               rasterGrob(img, interpolate = FALSE)})
-
+# filenames <- c(filename_small, filename_large, filename_small_spread)
+# plots <- map(filenames,
+#              function(x){
+#                img <- as.raster(readPNG(x))
+#                rasterGrob(img, interpolate = FALSE)})

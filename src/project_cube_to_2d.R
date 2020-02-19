@@ -3,9 +3,8 @@ library(tidyverse)
 library(here)
 library(ggplot2)
 library(tidylog)
-library(egg)
 library(ggpubr)
-
+library(gridExtra)
 
 # read occurrence cube
 occ_cube_reynoutria <- read_csv(file = here("data",
@@ -53,8 +52,8 @@ n_cells_per_species_year_plot <-
                       values = c("red", "green", "blue")) +
   ylab("area of occupancy (km2)") +
   theme(legend.title = element_blank(),
-        legend.justification = c(1,0), legend.position = c(0.25,0.77),
-        legend.text = element_text(size = 12),
+        # legend.justification = c(1,0), legend.position = c(0.36,0.77),
+        legend.text = element_text(size = 15),
         axis.title = element_text(size = 14))
 
 n_occs_cells_per_species_year_plot <-
@@ -117,14 +116,19 @@ n_occs_per_species_cell_map <-
   scale_fill_gradient(limits = c(1, max_occs),
                       trans = "log",
                       breaks = c(1, 10, 100, 1000, 2000)) +
-  coord_sf(xlim = c(4.2, 4.6),
-           ylim = c(51.05, 51.3),
+  coord_sf(xlim = c(4.25, 4.55),
+           ylim = c(51.05, 51.35),
            expand = FALSE) +
   xlab("Longitude") + ylab("Latitude") +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1),
-        axis.title = element_text(size = 14),
-        legend.title = element_blank(),
-        strip.text.x = element_text(size = 12))
+  scale_x_continuous(breaks = c(4.3, 4.4, 4.5),
+                     labels = c("4.3", "4.4",
+                                "4.5")) +
+  scale_y_continuous(breaks = c(51.1, 51.2, 51.3),
+                     labels = c("51.1", "51.2",
+                                "51.3")) +
+  theme(axis.title = element_text(size = 14),
+        legend.title = element_text(size = 12),
+        strip.text.x = element_text(size = 18))
 n_occs_per_species_cell_map
 
 ggsave(filename = here::here("figures", "n_occs_per_species_cell.png"),
@@ -162,20 +166,23 @@ n_occs_per_year_cell_map <-
   scale_fill_gradient(limits = c(1, max_occs),
                       trans = "log",
                       breaks = c(1, 10, 100, 1000, 2000)) +
-  coord_sf(xlim = c(4.2, 4.6),
-           ylim = c(51.05, 51.3),
+  coord_sf(xlim = c(4.25, 4.55),
+           ylim = c(51.05, 51.35),
            expand = FALSE) +
   xlab("Longitude") + ylab("Latitude") +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1),
-        axis.title = element_text(size = 14),
-        legend.title = element_blank(),
-        strip.text.x = element_text(size = 12))
+  scale_x_continuous(breaks = c(4.3, 4.4, 4.5),
+                     labels = c("4.3", "4.4",
+                                "4.5")) +
+  scale_y_continuous(breaks = c(51.1, 51.2, 51.3),
+                     labels = c("51.1", "51.2",
+                                "51.3")) +
+  theme(axis.title = element_text(size = 14),
+        legend.title = element_text(size = 12),
+        strip.text.x = element_text(size = 18))
 n_occs_per_year_cell_map
 
 ggsave(filename = here::here("figures", "n_occs_per_year_cell.png"),
        plot = n_occs_per_year_cell_map,
        dpi = 300,
        width = 15)
-
-# Put the three pngs together with labels B, C, D
 
