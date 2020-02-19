@@ -188,17 +188,18 @@ basic_grid_small <-
   setView(lng = small_radius_occ_reynoutria$decimalLongitude,
           lat = small_radius_occ_reynoutria$decimalLatitude,
           zoom = 14) %>%
-  addTiles() %>%
+  addProviderTiles(providers$Stamen.Terrain) %>%
   addPolygons(opacity = 1.0, fillOpacity = 0.0, weight = 0.5)
 
 basic_grid_large <-
   cells_surroundings_large %>%
   st_transform(crs = 4326) %>%
   leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
   setView(lng = large_radius_occ_reynoutria$decimalLongitude,
           lat = large_radius_occ_reynoutria$decimalLatitude,
           zoom = 14) %>%
-  addTiles() %>%
+  addProviderTiles(providers$Stamen.Terrain) %>%
   addPolygons(opacity = 1.0, fillOpacity = 0.0, weight = 0.5)
 
 basic_grid_small_spread <-
@@ -208,7 +209,7 @@ basic_grid_small_spread <-
   setView(lng = small_radius_occ_reynoutria_spread$decimalLongitude,
           lat = small_radius_occ_reynoutria_spread$decimalLatitude,
           zoom = 14) %>%
-  addTiles() %>%
+  addProviderTiles(providers$Stamen.Terrain) %>%
   addPolygons(opacity = 1.0, fillOpacity = 0.0, weight = 0.5)
 
 # add circles to grid map
