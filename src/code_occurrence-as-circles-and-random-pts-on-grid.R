@@ -1,0 +1,281 @@
+library(sf)
+library(sp)
+library(tidyverse)
+library(leaflet)
+library(here)
+
+#read EEA grid of Belgium
+be_grid <- st_read("../pipeline/data/external/utm1_bel")
+
+key <- "0011257-200127171203522"
+zip_filename <- paste0(key, ".zip")
+if (!file.exists(here::here("data", "raw", zip_filename))) {
+  occ <- occ_download_get(
+    key = key,
+    path = here::here("data", "raw")
+  )
+}
+
+occ_file <- paste(key, "occurrence.txt", sep = "_")
+occ_path <- here::here("data", "raw", occ_file)
+if (!file.exists(here::here("data", "raw", occ_file))) {
+  unzip(zipfile = occ,
+        files = "occurrence.txt",
+        exdir = here::here("data", "raw"))
+  file.rename(from = here::here("data", "raw", "occurrence.txt"),
+              to = occ_path
+  )
+}
+cols_occ_file <- read_delim(
+  occ_path, "\t", n_max = 1,
+  quote = ""
+)
+cols_occ_file <- names(cols_occ_file)
+
+length(cols_occ_file)
+
+
+occ_reynoutria <- read_tsv(
+  here::here("data", "raw", occ_file),
+  na = "",
+  quote = "",
+  guess_max = 50000)
+nrow(occ_reynoutria)
+
+# lat-lon of a point in space with small uncertainty (all within a cell)
+
+small_radius_occ_reynoutria <-
+  occ_reynoutria %>%
+  filter(coordinateUncertaintyInMeters < 150 &
+           coordinateUncertaintyInMeters > 60 &
+           coordinateUncertaintyInMeters != 100) %>%
+  sample_n(size = 1) %>%
+  select(gbifID,
+         decimalLongitude,
+         decimalLatitude,
+         coordinateUncertaintyInMeters)
+
+small_radius <- small_radius_occ_reynoutria$coordinateUncertaintyInMeters
+small_radius
+
+large_radius_occ_reynoutria <-
+  occ_reynoutria %>%
+  filter(coordinateUncertaintyInMeters < 2500 &
+           coordinateUncertaintyInMeters > 850) %>%
+  sample_n(size = 1) %>%
+  select(gbifID,
+         decimalLongitude,
+         decimalLatitude,
+         coordinateUncertaintyInMeters)
+
+large_radius <- large_radius_occ_reynoutria$coordinateUncertaintyInMeters
+large_radius
+
+sf_lat_lon_small <-
+  small_radius_occ_reynoutria %>%
+  st_as_sf(coords = c("decimalLongitude", "decimalLatitude"), crs = 4326) %>%
+  st_transform(CRS("+init=epsg:3035"))
+
+sf_lat_lon_large <-
+  large_radius_occ_reynoutria %>%
+  st_as_sf(coords = c("decimalLongitude", "decimalLatitude"), crs = 4326) %>%
+  st_transform(CRS("+init=epsg:3035"))
+
+# get needed cellcodes
+x_y_small <- st_coordinates(sf_lat_lon_small)
+x_y_large <- st_coordinates(sf_lat_lon_large)
+# cell the centroid belongs to
+centroid_cell_small <- paste0("1km",
+                        "E",
+                        floor(x_y_small[1]/1000),
+                        "N",
+                        floor(x_y_small[2]/1000))
+# cell the centroid belongs to
+centroid_cell_large <- paste0("1km",
+                              "E",
+                              floor(x_y_large[1]/1000),
+                              "N",
+                              floor(x_y_large[2]/1000))
+x_y_cells_surroundings_small <- crossing(
+  x = seq(floor(x_y_small[1]/1000) - 3, floor(x_y_small[1]/1000) + 3),
+  y = seq(floor(x_y_small[2]/1000) - 3, floor(x_y_small[2]/1000) + 3))
+x_y_cells_surroundings_small <-
+  paste0(
+    "1km",
+    "E",
+    x_y_cells_surroundings_small$x,
+    "N",
+    x_y_cells_surroundings_small$y
+  )
+
+x_y_cells_surroundings_large <- crossing(
+  x = seq(floor(x_y_large[1]/1000) - 4, floor(x_y_large[1]/1000) + 4),
+  y = seq(floor(x_y_large[2]/1000) - 4, floor(x_y_large[2]/1000) + 4))
+x_y_cells_surroundings_large <-
+  paste0(
+    "1km",
+    "E",
+    x_y_cells_surroundings_large$x,
+    "N",
+    x_y_cells_surroundings_large$y
+  )
+
+# select cells in the surroundings of circle
+cells_surroundings_small <-
+  be_grid %>%
+  filter(CELLCODE %in% x_y_cells_surroundings_small)
+
+cells_surroundings_large <-
+  be_grid %>%
+  filter(CELLCODE %in% x_y_cells_surroundings_large)
+
+basic_grid_small <-
+  cells_surroundings_small %>%
+  st_transform(crs = 4326) %>%
+  leaflet() %>%
+  setView(lng = small_radius_occ_reynoutria$decimalLongitude,
+          lat = small_radius_occ_reynoutria$decimalLatitude,
+          zoom = 13) %>%
+  addTiles() %>%
+  addPolygons(opacity = 1.0, fillOpacity = 0.2, weight = 0.5)
+
+basic_grid_large <-
+  cells_surroundings_large %>%
+  st_transform(crs = 4326) %>%
+  leaflet() %>%
+  setView(lng = large_radius_occ_reynoutria$decimalLongitude,
+          lat = large_radius_occ_reynoutria$decimalLatitude,
+          zoom = 13) %>%
+  addTiles() %>%
+  addPolygons(opacity = 1.0, fillOpacity = 0.2, weight = 0.5)
+
+map_circle_in_cell_small <-
+  basic_grid_small %>%
+  addCircles(lng = small_radius_occ_reynoutria$decimalLongitude,
+             lat = small_radius_occ_reynoutria$decimalLatitude,
+             weight = 1,
+             radius = small_radius, color = "red")
+map_circle_in_cell_small
+
+map_circle_in_cell_large <-
+  basic_grid_large %>%
+  addCircles(lng = large_radius_occ_reynoutria$decimalLongitude,
+             lat = large_radius_occ_reynoutria$decimalLatitude,
+             weight = 1,
+             radius = large_radius, color = "red")
+map_circle_in_cell_large
+
+# pick random point in small circle
+random_pt_small_circle <- as(sf_lat_lon_small, "Spatial")
+nrow_df <- nrow(random_pt_small_circle)
+random_pt_small_circle@data <-
+  random_pt_small_circle@data %>%
+  mutate(random_angle = runif(nrow_df, 0, 2*pi))
+
+random_pt_small_circle@data <-
+  random_pt_small_circle@data %>%
+  mutate(random_r = sqrt(runif(
+    nrow_df, 0, 1)) * small_radius)
+
+random_pt_small_circle@data <-
+  random_pt_small_circle@data %>%
+  mutate(x = random_pt_small_circle@coords[, "coords.x1"],
+         y = random_pt_small_circle@coords[, "coords.x2"])
+random_pt_small_circle@data <-
+  random_pt_small_circle@data %>%
+  mutate(x = x + random_r * cos(random_angle),
+         y = y + random_r * sin(random_angle)) %>%
+  select(-c(random_angle, random_r))
+
+random_pt_small_circle <-
+  random_pt_small_circle@data %>%
+  st_as_sf(coords = c("x", "y"), crs = 3035)
+
+x_y_random_pt_small_circle <- st_coordinates(random_pt_small_circle)
+# cell the random point belongs to
+cellcode_random_pt_small_circle <- paste0(
+  "1km",
+  "E",
+  floor(x_y_random_pt_small_circle[1]/1000),
+  "N",
+  floor(x_y_random_pt_small_circle[2]/1000)
+)
+
+cell_random_pt_small_circle_wgs84 <-
+  be_grid %>%
+  filter(CELLCODE == cellcode_random_pt_small_circle) %>%
+  st_transform(4326)
+
+random_pt_small_circle <-
+  random_pt_small_circle %>%
+  st_transform(4326) %>%
+  st_coordinates
+
+map_random_pt_in_cell_small <-
+  map_circle_in_cell_small %>%
+  addCircleMarkers(lng = random_pt_small_circle[1, "X"],
+                   lat = random_pt_small_circle[1, "Y"],
+                   radius = 1,
+                   fillOpacity = 1) %>%
+  # stress the cell the random point falls in
+  addPolygons(data = cell_random_pt_small_circle_wgs84,
+              opacity = 1.0, fillOpacity = 0.0, weight = 3)
+map_random_pt_in_cell_small
+
+
+# pick random point in large circle
+random_pt_large_circle <- as(sf_lat_lon_large, "Spatial")
+random_pt_large_circle@data <-
+  random_pt_large_circle@data %>%
+  mutate(random_angle = runif(nrow_df, 0, 2*pi))
+
+random_pt_large_circle@data <-
+  random_pt_large_circle@data %>%
+  mutate(random_r = sqrt(runif(
+    nrow_df, 0, 1)) * large_radius)
+
+random_pt_large_circle@data <-
+  random_pt_large_circle@data %>%
+  mutate(x = random_pt_large_circle@coords[, "coords.x1"],
+         y = random_pt_large_circle@coords[, "coords.x2"])
+random_pt_large_circle@data <-
+  random_pt_large_circle@data %>%
+  mutate(x = x + random_r * cos(random_angle),
+         y = y + random_r * sin(random_angle)) %>%
+  select(-c(random_angle, random_r))
+
+random_pt_large_circle <-
+  random_pt_large_circle@data %>%
+  st_as_sf(coords = c("x", "y"), crs = 3035)
+
+x_y_random_pt_large_circle <- st_coordinates(random_pt_large_circle)
+
+# cell the random point belongs to
+cellcode_random_pt_large_circle <- paste0(
+  "1km",
+  "E",
+  floor(x_y_random_pt_large_circle[1]/1000),
+  "N",
+  floor(x_y_random_pt_large_circle[2]/1000)
+)
+
+cell_random_pt_large_circle_wgs84 <-
+  be_grid %>%
+  filter(CELLCODE == cellcode_random_pt_large_circle) %>%
+  st_transform(4326)
+
+random_pt_large_circle <-
+  random_pt_large_circle %>%
+  st_transform(4326) %>%
+  st_coordinates
+
+map_random_pt_over_cells <-
+  map_circle_in_cell_large %>%
+  addCircleMarkers(lng = random_pt_large_circle[1, "X"],
+                   lat = random_pt_large_circle[1, "Y"],
+                   radius = 1,
+                   fillOpacity = 1) %>%
+  # stress the cell the random point falls in
+  addPolygons(data = cell_random_pt_large_circle_wgs84,
+              opacity = 1.0, fillOpacity = 0.0, weight = 3)
+map_random_pt_over_cells
