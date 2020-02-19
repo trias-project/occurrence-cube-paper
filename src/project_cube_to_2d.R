@@ -33,8 +33,16 @@ n_occs_per_species_year <-
 n_occs_per_species_year_plot <-
   n_occs_per_species_year %>%
   ggplot() +
-  geom_line(aes(x = year, y = occurrences, color = as.factor(species))) +
-  scale_colour_manual(values = c("red", "green", "blue"), guide = FALSE) +
+  geom_line(aes(x = year, y = occurrences,
+                color = as.factor(species),
+                linetype = as.factor(species)),
+            size = 1) +
+  scale_colour_manual(labels = c("R. bohemica", "R. japonica", "R. sachaliensis"),
+                      values = c("darkgrey", "black", "black"),
+                      guide = FALSE) +
+  scale_linetype_manual(labels = c("R. bohemica", "R. japonica", "R. sachaliensis"),
+                        values = c("solid", "solid", "dotted"),
+                        guide = FALSE) +
   theme(axis.title = element_text(size = 14))
 
 # Number of cells (area of occuapncy)
@@ -47,15 +55,20 @@ n_cells_per_species_year <-
 n_cells_per_species_year_plot <-
   n_cells_per_species_year %>%
   ggplot() +
-  geom_line(aes(x = year, y = aoo, color = as.factor(species))) +
+  geom_line(aes(x = year, y = aoo,
+                color = as.factor(species),
+                linetype = as.factor(species)),
+            size = 1) +
   scale_colour_manual(labels = c("R. bohemica", "R. japonica", "R. sachaliensis"),
-                      values = c("red", "green", "blue")) +
+                      values = c("darkgrey", "black", "black")) +
+  scale_linetype_manual(labels = c("R. bohemica", "R. japonica", "R. sachaliensis"),
+                        values = c("solid", "solid", "dotted")) +
   ylab("area of occupancy (km2)") +
   theme(legend.title = element_blank(),
-        # legend.justification = c(1,0), legend.position = c(0.36,0.77),
+        legend.justification = c(1,0), legend.position = c(0.37,0.77),
         legend.text = element_text(size = 15),
         axis.title = element_text(size = 14))
-
+n_cells_per_species_year_plot
 n_occs_cells_per_species_year_plot <-
   grid.arrange(n_occs_per_species_year_plot,
                n_cells_per_species_year_plot, nrow = 1)
@@ -63,7 +76,8 @@ n_occs_cells_per_species_year_plot <-
 ggsave(filename = here::here("figures", "n_occs_cells_per_species_year.png"),
        plot = n_occs_cells_per_species_year_plot,
        dpi = 300,
-       width = 15)
+       width = 12,
+       height = 5)
 
 
 ## Project cube on taxonomic - spatial dimension
@@ -116,13 +130,13 @@ n_occs_per_species_cell_map <-
   scale_fill_gradient(limits = c(1, max_occs),
                       trans = "log",
                       breaks = c(1, 10, 100, 1000, 2000)) +
-  coord_sf(xlim = c(4.25, 4.55),
+  coord_sf(xlim = c(4.05, 4.65),
            ylim = c(51.05, 51.35),
            expand = FALSE) +
   xlab("Longitude") + ylab("Latitude") +
-  scale_x_continuous(breaks = c(4.3, 4.4, 4.5),
-                     labels = c("4.3", "4.4",
-                                "4.5")) +
+  scale_x_continuous(breaks = c(4.1, 4.2, 4.3, 4.4, 4.5, 4.6),
+                     labels = c("4.1", "4.2", "4.3", "4.4",
+                                "4.5", "4.6")) +
   scale_y_continuous(breaks = c(51.1, 51.2, 51.3),
                      labels = c("51.1", "51.2",
                                 "51.3")) +
@@ -166,13 +180,13 @@ n_occs_per_year_cell_map <-
   scale_fill_gradient(limits = c(1, max_occs),
                       trans = "log",
                       breaks = c(1, 10, 100, 1000, 2000)) +
-  coord_sf(xlim = c(4.25, 4.55),
+  coord_sf(xlim = c(4.05, 4.65),
            ylim = c(51.05, 51.35),
            expand = FALSE) +
   xlab("Longitude") + ylab("Latitude") +
-  scale_x_continuous(breaks = c(4.3, 4.4, 4.5),
-                     labels = c("4.3", "4.4",
-                                "4.5")) +
+  scale_x_continuous(breaks = c(4.1, 4.2, 4.3, 4.4, 4.5, 4.6),
+                     labels = c("4.1", "4.2", "4.3", "4.4",
+                                "4.5", "4.6")) +
   scale_y_continuous(breaks = c(51.1, 51.2, 51.3),
                      labels = c("51.1", "51.2",
                                 "51.3")) +

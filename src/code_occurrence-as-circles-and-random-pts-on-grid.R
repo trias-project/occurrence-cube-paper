@@ -189,7 +189,7 @@ basic_grid_small <-
           lat = small_radius_occ_reynoutria$decimalLatitude,
           zoom = 14) %>%
   addTiles() %>%
-  addPolygons(opacity = 1.0, fillOpacity = 0.2, weight = 0.5)
+  addPolygons(opacity = 1.0, fillOpacity = 0.0, weight = 0.5)
 
 basic_grid_large <-
   cells_surroundings_large %>%
@@ -199,7 +199,7 @@ basic_grid_large <-
           lat = large_radius_occ_reynoutria$decimalLatitude,
           zoom = 14) %>%
   addTiles() %>%
-  addPolygons(opacity = 1.0, fillOpacity = 0.2, weight = 0.5)
+  addPolygons(opacity = 1.0, fillOpacity = 0.0, weight = 0.5)
 
 basic_grid_small_spread <-
   cells_surroundings_small_spread %>%
@@ -209,7 +209,7 @@ basic_grid_small_spread <-
           lat = small_radius_occ_reynoutria_spread$decimalLatitude,
           zoom = 14) %>%
   addTiles() %>%
-  addPolygons(opacity = 1.0, fillOpacity = 0.2, weight = 0.5)
+  addPolygons(opacity = 1.0, fillOpacity = 0.0, weight = 0.5)
 
 # add circles to grid map
 map_circle_in_cell_small <-
