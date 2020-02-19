@@ -1,9 +1,10 @@
 library(tidyverse)      # To do datascience
+library(tidylog)        # To get verbose datascience
 library(here)           # To find files
 library(rgbif)          # To use GBIF services
 library(sf)             # To work with GIS data
 library(leaflet)        # To make maps using Openstreet Maps
-
+library(mapview)
 
 key <- "0011257-200127171203522"
 zip_filename <- paste0(key, ".zip")
@@ -30,15 +31,11 @@ cols_occ_file <- read_delim(
 )
 cols_occ_file <- names(cols_occ_file)
 
-length(cols_occ_file)
-
-
 occ_reynoutria <- read_tsv(
   here::here("data", "raw", occ_file),
   na = "",
   quote = "",
   guess_max = 50000)
-nrow(occ_reynoutria)
 
 issues_to_discard <- c(
   "ZERO_COORDINATE",
@@ -54,7 +51,6 @@ issues <-
   separate(issue, into = "issues", sep = ";") %>%
   distinct() %>%
   arrange()
-issues
 
 if (any(issues_to_discard %in% issues$issues)) {
   occ_reynoutria <-
@@ -78,7 +74,6 @@ occurrenceStatus <-
   occ_reynoutria %>%
   distinct(occurrenceStatus) %>%
   distinct()
-occurrenceStatus
 
 if (any(
   occurrenceStatus_to_discard %in% occurrenceStatus$occurrenceStatus)) {
@@ -86,18 +81,8 @@ if (any(
     occ_reynoutria %>%
     filter(!occurrenceStatus %in% occurrenceStatus_to_discard)
 }
-nrow(occ_reynoutria)
 
-# Make table 1
-occ_reynoutria %>%
-  distinct(scientificName,
-           taxonRank,
-           species,
-           taxonomicStatus,
-           acceptedScientificName) %>%
-  arrange(species, taxonomicStatus)
-
-# Show how to add uncertainty if not present
+# Add uncertainty if not present
 occs_no_uncertainty <-
   occ_reynoutria %>%
   filter(is.na(coordinateUncertaintyInMeters))
@@ -106,8 +91,6 @@ occs_no_uncertainty %>%
   distinct(datasetKey)
 
 # Code for Fig.2 Add 1000m uncertainty to occurrences without it and plot them
-sample_occs_no_uncertainty <-
-  occs_no_uncertainty
 occs_no_uncertainty_map <-
   occs_no_uncertainty %>%
   head() %>%
@@ -115,8 +98,11 @@ occs_no_uncertainty_map <-
   st_transform(3035) %>%
   leaflet() %>%
   addTiles() %>%
-  addCircles(lng = sample_occs_no_uncertainty$decimalLongitude,
-             lat = sample_occs_no_uncertainty$decimalLatitude, weight = 1,
+  addCircles(lng = occs_no_uncertainty$decimalLongitude,
+             lat = occs_no_uncertainty$decimalLatitude, weight = 1,
              radius = 1000, color = "red") %>%
   setView(lng = 3.683700, lat = 50.900596, zoom = 9)
 occs_no_uncertainty_map
+# save map as png
+mapshot(occs_no_uncertainty_map,
+        file = here::here("figures", "add_uncertainty_1000m.png"))
