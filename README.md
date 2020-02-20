@@ -14,7 +14,7 @@ The repository structure is based on [Cookiecutter Data Science](http://drivenda
 │
 ├── data
 │   ├── raw              : Occurrence data as downloaded from GBIF GENERATED
-│   └── processed        : occurrence data cube and related taxonomic compendium GENERATED
+│   └── processed        : occurrence data cube and taxonomic compendium GENERATED
 │   └── external
         ├── utm1_bel     : EEA reference grid at 1km scale GENERATED
 └── src
