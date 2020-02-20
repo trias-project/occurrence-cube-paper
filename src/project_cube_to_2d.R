@@ -150,7 +150,6 @@ ggsave(filename = here::here("figures", "n_occs_per_species_cell.png"),
        dpi = 300,
        width = 15)
 
-
 ## Project on temporal - spatial dimension
 n_occs_per_year_cell <-
   occ_cube_reynoutria %>%
