@@ -189,7 +189,10 @@ basic_grid_small <-
           lat = small_radius_occ_reynoutria$decimalLatitude,
           zoom = 14) %>%
   addProviderTiles(providers$Stamen.Terrain) %>%
-  addPolygons(opacity = 1.0, fillOpacity = 0.0, weight = 0.5)
+  addPolygons(opacity = 0.2,
+              fillOpacity = 0.0,
+              weight = 1.0,
+              color = "black")
 
 basic_grid_large <-
   cells_surroundings_large %>%
@@ -200,7 +203,10 @@ basic_grid_large <-
           lat = large_radius_occ_reynoutria$decimalLatitude,
           zoom = 14) %>%
   addProviderTiles(providers$Stamen.Terrain) %>%
-  addPolygons(opacity = 1.0, fillOpacity = 0.0, weight = 0.5)
+  addPolygons(opacity = 0.2,
+              fillOpacity = 0.0,
+              weight = 1.0,
+              color = "black")
 
 basic_grid_small_spread <-
   cells_surroundings_small_spread %>%
@@ -210,35 +216,38 @@ basic_grid_small_spread <-
           lat = small_radius_occ_reynoutria_spread$decimalLatitude,
           zoom = 14) %>%
   addProviderTiles(providers$Stamen.Terrain) %>%
-  addPolygons(opacity = 1.0, fillOpacity = 0.0, weight = 0.5)
+  addPolygons(opacity = 0.2,
+              fillOpacity = 0.0,
+              weight = 1.0,
+              color = "black")
 
 # add circles to grid map
 map_circle_in_cell_small <-
   basic_grid_small %>%
   addCircles(lng = small_radius_occ_reynoutria$decimalLongitude,
              lat = small_radius_occ_reynoutria$decimalLatitude,
-             weight = 1,
-             radius = small_radius, color = "red")
+             weight = 3,
+             radius = small_radius, color = "black")
 map_circle_in_cell_small
 
 map_circle_in_cell_large <-
   basic_grid_large %>%
   addCircles(lng = large_radius_occ_reynoutria$decimalLongitude,
              lat = large_radius_occ_reynoutria$decimalLatitude,
-             weight = 1,
-             radius = large_radius, color = "red")
+             weight = 3,
+             radius = large_radius, color = "black")
 map_circle_in_cell_large
 
 map_circle_in_cell_small_spread <-
   basic_grid_small_spread %>%
   addCircles(lng = small_radius_occ_reynoutria_spread$decimalLongitude,
              lat = small_radius_occ_reynoutria_spread$decimalLatitude,
-             weight = 1,
-             radius = small_radius_spread, color = "red")
+             weight = 3,
+             radius = small_radius_spread, color = "black")
 map_circle_in_cell_small_spread
 
 # pick random point in small circle
-# Run code below 241 - 295 to produce a random assignment
+# Run code below 251 - 310 to produce a random assignment
 random_pt_small_circle <- as(sf_lat_lon_small, "Spatial")
 nrow_df <- nrow(random_pt_small_circle)
 random_pt_small_circle@data <-
@@ -288,15 +297,20 @@ map_random_pt_in_cell_small <-
   map_circle_in_cell_small %>%
   addCircleMarkers(lng = random_pt_small_circle[1, "X"],
                    lat = random_pt_small_circle[1, "Y"],
-                   radius = 1,
-                   fillOpacity = 1) %>%
+                   radius = 2,
+                   fillOpacity = 1.0,
+                   opacity = 1.0,
+                   color = "red") %>%
   # stress the cell the random point falls in
   addPolygons(data = cell_random_pt_small_circle_wgs84,
-              opacity = 1.0, fillOpacity = 0.0, weight = 3)
+              opacity = 1.0,
+              fillOpacity = 0.0,
+              weight = 3,
+              color = "red")
 map_random_pt_in_cell_small
 
 # pick random point in large circle
-# Run code below 296 - 350 to produce a random assignment
+# Run code below 314 - 373 to produce a random assignment
 random_pt_large_circle <- as(sf_lat_lon_large, "Spatial")
 random_pt_large_circle@data <-
   random_pt_large_circle@data %>%
@@ -346,11 +360,16 @@ map_random_pt_over_cells <-
   map_circle_in_cell_large %>%
   addCircleMarkers(lng = random_pt_large_circle[1, "X"],
                    lat = random_pt_large_circle[1, "Y"],
-                   radius = 1,
-                   fillOpacity = 1) %>%
+                   radius = 2,
+                   fillOpacity = 1.0,
+                   opacity = 1.0,
+                   color = "red") %>%
   # stress the cell the random point falls in
   addPolygons(data = cell_random_pt_large_circle_wgs84,
-              opacity = 1.0, fillOpacity = 0.0, weight = 3)
+              opacity = 1.0,
+              fillOpacity = 0.0,
+              weight = 3,
+              color = "red")
 map_random_pt_over_cells
 
 # pick random point in small circle overlapping two cells
@@ -405,11 +424,16 @@ map_random_pt_in_cell_small_spread <-
   map_circle_in_cell_small_spread %>%
   addCircleMarkers(lng = random_pt_small_circle_spread[1, "X"],
                    lat = random_pt_small_circle_spread[1, "Y"],
-                   radius = 1,
-                   fillOpacity = 1) %>%
+                   radius = 2,
+                   fillOpacity = 1.0,
+                   opacity = 1.0,
+                   color = "red") %>%
   # stress the cell the random point falls in
   addPolygons(data = cell_random_pt_small_circle_wgs84_spread,
-              opacity = 1.0, fillOpacity = 0.0, weight = 3)
+              opacity = 1.0,
+              fillOpacity = 0.0,
+              weight = 3,
+              color = "red")
 map_random_pt_in_cell_small_spread
 
 # save maps as png
