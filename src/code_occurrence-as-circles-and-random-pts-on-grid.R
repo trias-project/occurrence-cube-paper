@@ -373,7 +373,7 @@ map_random_pt_over_cells <-
 map_random_pt_over_cells
 
 # pick random point in small circle overlapping two cells
-# Run code below 354 - 409 to produce a random assignment
+# Run code below 377 - 460 to produce a random assignment
 random_pt_small_circle_spread <- as(sf_lat_lon_small_spread, "Spatial")
 nrow_df <- nrow(random_pt_small_circle_spread)
 random_pt_small_circle_spread@data <-
@@ -458,9 +458,3 @@ filename_small_spread <- here::here(
          ".png"))
 mapshot(map_random_pt_in_cell_small_spread,
         file = filename_small_spread)
-
-# filenames <- c(filename_small, filename_large, filename_small_spread)
-# plots <- map(filenames,
-#              function(x){
-#                img <- as.raster(readPNG(x))
-#                rasterGrob(img, interpolate = FALSE)})
