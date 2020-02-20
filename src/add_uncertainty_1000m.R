@@ -97,7 +97,7 @@ occs_no_uncertainty_map <-
   st_as_sf(coords = c("decimalLongitude", "decimalLatitude"), crs = 4326) %>%
   st_transform(3035) %>%
   leaflet() %>%
-  addTiles() %>%
+  addProviderTiles(providers$Stamen.Terrain) %>%
   addCircles(lng = occs_no_uncertainty$decimalLongitude,
              lat = occs_no_uncertainty$decimalLatitude, weight = 1,
              radius = 1000, color = "red") %>%
