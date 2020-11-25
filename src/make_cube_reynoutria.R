@@ -20,6 +20,7 @@ if (!file.exists(here::here("data", "raw", zip_filename))) {
   )
 }
 
+# Extract occurrences from DwC-Archive file (zipped)
 occ_file <- paste(key, "occurrence.txt", sep = "_")
 occ_path <- here::here("data", "raw", occ_file)
 if (!file.exists(here::here("data", "raw", occ_file))) {
@@ -39,6 +40,7 @@ cols_occ_file <- names(cols_occ_file)
 length(cols_occ_file)
 
 
+# Read occurrences
 occ_reynoutria <- read_tsv(
   here::here("data", "raw", occ_file),
   na = "",
@@ -46,14 +48,8 @@ occ_reynoutria <- read_tsv(
   guess_max = 50000)
 nrow(occ_reynoutria)
 
-issues_to_discard <- c(
-  "ZERO_COORDINATE",
-  "COORDINATE_OUT_OF_RANGE",
-  "COORDINATE_INVALID"
-)
-names(issues_to_discard) <- issues_to_discard
-issues_to_discard
 
+# Overview issues
 issues <-
   occ_reynoutria %>%
   distinct(issue) %>%
@@ -61,6 +57,15 @@ issues <-
   distinct() %>%
   arrange()
 issues
+
+# Discard occurrences with these coordinate issues
+issues_to_discard <- c(
+  "ZERO_COORDINATE",
+  "COORDINATE_OUT_OF_RANGE",
+  "COORDINATE_INVALID"
+)
+names(issues_to_discard) <- issues_to_discard
+issues_to_discard
 
 if (any(issues_to_discard %in% issues$issues)) {
   occ_reynoutria <-
@@ -75,16 +80,18 @@ if (any(issues_to_discard %in% issues$issues)) {
     select(-one_of(issues_to_discard))
 }
 
+
+occurrenceStatus <-
+  occ_reynoutria %>%
+  group_by(occurrenceStatus)
+occurrenceStatus
+
+
+# Discard absences
 occurrenceStatus_to_discard <- c(
   "absent",
   "excluded"
 )
-
-occurrenceStatus <-
-  occ_reynoutria %>%
-  distinct(occurrenceStatus) %>%
-  distinct()
-occurrenceStatus
 
 if (any(
   occurrenceStatus_to_discard %in% occurrenceStatus$occurrenceStatus)) {
@@ -92,6 +99,7 @@ if (any(
     occ_reynoutria %>%
     filter(!occurrenceStatus %in% occurrenceStatus_to_discard)
 }
+
 nrow(occ_reynoutria)
 
 # Assign 1000 meters to occurrences without uncertainty or occurrences with zero
