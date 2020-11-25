@@ -81,6 +81,7 @@ if (any(issues_to_discard %in% issues$issues)) {
 }
 
 
+# Overview values occurrence status
 occurrenceStatus <-
   occ_reynoutria %>%
   group_by(occurrenceStatus)
@@ -128,9 +129,9 @@ if (any(
 # Final number of occurrences used for making cubes
 nrow(occ_reynoutria)
 
+
 # Assign 1000 meters to occurrences without uncertainty or occurrences with zero
 # uncertainty
-
 occ_reynoutria <-
   occ_reynoutria %>%
   mutate(
@@ -195,6 +196,9 @@ occ_cube_reynoutria <-
   summarize(n = n(),
             min_coord_uncertainty = min(coordinateUncertaintyInMeters)) %>%
   ungroup()
+# Get a seed for generating random numbers (e.g. based on yyyymmdd)
+set.seed(20201125)
+
 
 # get all taxa
 occ_cube_reynoutria_species <-
