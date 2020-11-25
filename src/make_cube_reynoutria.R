@@ -173,11 +173,17 @@ taxa_species_reynoutria <-
   # get unique 'speciesKey'
   distinct(speciesKey) %>%
 
-  # rename column 'speciesKey' to 'key'
-  rename(key = speciesKey) %>%
+  # extract speciesKey
+  pull(speciesKey) %>%
 
-  # GBIF query via name_usage with 'key' column as input
-  pmap_dfr(name_usage, return = "data") %>%
+  # GBIF query via name_usage
+  map(~name_usage(key = .x)) %>%
+
+  # Select data
+  map(~.x[["data"]]) %>%
+
+  # Merge all taxa in a data.frame
+  reduce(full_join) %>%
 
   # select columns of interest
   select(speciesKey, scientificName, rank, taxonomicStatus) %>%
