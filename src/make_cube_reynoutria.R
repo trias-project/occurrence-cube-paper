@@ -100,6 +100,32 @@ if (any(
     filter(!occurrenceStatus %in% occurrenceStatus_to_discard)
 }
 
+
+# Overview values identificationVerificationStatus
+identificationVerificationStatus <-
+  occ_reynoutria %>%
+  group_by(identificationVerificationStatus) %>%
+  count()
+identificationVerificationStatus
+
+# Discard unverified data
+identificationVerificationStatus_to_discard <- c(
+  "unverified",
+  "unvalidated",
+  "not able to validate",
+  "control could not be conclusive due to insufficient knowledge"
+)
+
+if (any(
+  identificationVerificationStatus_to_discard %in% identificationVerificationStatus$identificationVerificationStatus)) {
+  occ_reynoutria <-
+    occ_reynoutria %>%
+    filter(!identificationVerificationStatus %in%
+             identificationVerificationStatus_to_discard)
+}
+
+
+# Final number of occurrences used for making cubes
 nrow(occ_reynoutria)
 
 # Assign 1000 meters to occurrences without uncertainty or occurrences with zero
