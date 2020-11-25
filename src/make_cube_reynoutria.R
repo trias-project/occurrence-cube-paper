@@ -268,3 +268,6 @@ taxa_species_reynoutria <-
 
 taxa_species_reynoutria
 
+write_csv(x = taxa_species_reynoutria,
+          file = here("data", "processed", "taxa_reynoutria_BE.csv"),
+          na = "")
