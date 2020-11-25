@@ -157,53 +157,70 @@ proj4string(geodata_df) <- CRS("+init=epsg:4326")
 geodata_df <- spTransform(geodata_df, CRS("+init=epsg:3035"))
 colnames(geodata_df@coords) <- c("x", "y")
 
-## Assign occurrence within uncertainty circle
-geodata_df@data <-
-  geodata_df@data %>%
-  mutate(random_angle = runif(nrow_geodata_df, 0, 2*pi))
-geodata_df@data <-
-  geodata_df@data %>%
-  mutate(random_r = sqrt(runif(
-    nrow_geodata_df, 0, 1)) * coordinateUncertaintyInMeters)
-geodata_df@data <-
-  geodata_df@data %>%
-  mutate(x = geodata_df@coords[, "x"],
-         y = geodata_df@coords[, "y"])
-geodata_df@data <-
-  geodata_df@data %>%
-  mutate(x = x + random_r * cos(random_angle),
-         y = y + random_r * sin(random_angle))
-# x` and `y` are the new coordinates while in `@coords` we keep track of the original coordinates:
-geodata_df@data <-
-  geodata_df@data %>%
-  select(-c(random_angle, random_r)) %>%
-  select(x, y, coordinateUncertaintyInMeters)
-
-# We assign each occurrence to a grid cell.
-geodata_df@data <-
-  geodata_df@data %>%
-  mutate(eea_cell_code = paste0("1km",
-                                "E", floor(x/1000),
-                                "N", floor(y/1000)))
-# Add cell code to occ_reynoutria
-occ_reynoutria$eea_cell_code <- geodata_df@data$eea_cell_code
-# example
-occ_reynoutria %>% head()
-
-occ_cube_reynoutria <-
-  occ_reynoutria %>%
-  group_by(year, eea_cell_code, speciesKey, species) %>%
-  summarize(n = n(),
-            min_coord_uncertainty = min(coordinateUncertaintyInMeters)) %>%
-  ungroup()
 # Get a seed for generating random numbers (e.g. based on yyyymmdd)
 set.seed(20201125)
 
+# Number of cubes to generate
+n_cubes <- 100
+
+for (i in 1:100) {
+  message(paste0("* Generating cube ", i, "/", n_cubes))
+  ## Assign occurrence within uncertainty circle
+  geodata_df@data <-
+    geodata_df@data %>%
+    mutate(random_angle = runif(nrow_geodata_df, 0, 2*pi))
+  geodata_df@data <-
+    geodata_df@data %>%
+    mutate(random_r = sqrt(runif(
+      nrow_geodata_df, 0, 1)) * coordinateUncertaintyInMeters)
+  geodata_df@data <-
+    geodata_df@data %>%
+    mutate(x = geodata_df@coords[, "x"],
+           y = geodata_df@coords[, "y"])
+  geodata_df@data <-
+    geodata_df@data %>%
+    mutate(x = x + random_r * cos(random_angle),
+           y = y + random_r * sin(random_angle))
+  # x` and `y` are the new coordinates while in `@coords` we keep track of the original coordinates:
+  geodata_df@data <-
+    geodata_df@data %>%
+    select(-c(random_angle, random_r)) %>%
+    select(x, y, coordinateUncertaintyInMeters)
+
+  # We assign each occurrence to a grid cell.
+  geodata_df@data <-
+    geodata_df@data %>%
+    mutate(eea_cell_code = paste0("1km",
+                                  "E", floor(x/1000),
+                                  "N", floor(y/1000)))
+  # Add cell code to occ_reynoutria
+  occ_reynoutria$eea_cell_code <- geodata_df@data$eea_cell_code
+
+  # Aggregate to get the cube
+  occ_cube_reynoutria <-
+    occ_reynoutria %>%
+    group_by(year, eea_cell_code, speciesKey, species) %>%
+    summarize(n = n(),
+              min_coord_uncertainty = min(coordinateUncertaintyInMeters)) %>%
+    ungroup()
+
+  # Save the cube
+  write_csv(
+    x = occ_cube_reynoutria,
+    file = here("data",
+                "processed",
+                paste0("cube_reynoutria_BE_",
+                       str_pad(string = i, width = 3, pad = "0"),
+                       ".csv"),
+                na = "")
+  )
+}
 
 # get all taxa
 occ_cube_reynoutria_species <-
   occ_reynoutria %>%
   distinct(speciesKey, taxonKey, scientificName, species)
+
 
 taxa_species_reynoutria <-
   occ_cube_reynoutria_species %>%
@@ -251,5 +268,3 @@ taxa_species_reynoutria <-
 
 taxa_species_reynoutria
 
-write_csv(occ_cube_reynoutria, path = "./data/processed/cube_reynoutria_BE.csv", na = "")
-write_csv(taxa_species_reynoutria, path = "./data/processed/taxa_reynoutria_BE.csv", na = "")
