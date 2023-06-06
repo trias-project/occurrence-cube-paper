@@ -181,6 +181,8 @@ full_join(grid_df, occupancy_prob_df, by = join_by(id)) %>%
        x = "", y = "")
 ```
 
+> distribution of occupied grid cells ...
+
 # Convergence
 ## Grid cell statistics
 
@@ -222,7 +224,9 @@ for (i in seq_len(length(unique(final_df$sim)))) {
 cum_mean_df2 <- do.call(rbind.data.frame, out) %>%
   unnest(cols = c(mean_n)) %>%
   rename(mean_n = y, mean_min = ymin, mean_max = ymax)
+```
 
+```{r}
 cum_mean_df2 %>%
   group_by(id) %>%
   mutate(sum = sum(mean_n)) %>%
@@ -230,12 +234,13 @@ cum_mean_df2 %>%
   filter(sum != 0) %>%
   ggplot(aes(x = sim, y = mean_n, colour = as.factor(id), group = id)) +
     geom_errorbar(aes(ymin = mean_min, ymax = mean_max)) +
-    geom_point(size = 0.05, colour = alpha("lightgrey", 0.1)) +
+    geom_point(size = 0.05, colour = alpha("lightgrey", 0.2)) +
     scale_x_continuous(breaks = seq(0, 1000, 100)) +
     theme(legend.position = "") +
     labs(x = "number of simulations", 
          y = "mean number of occurrences per\ngrid with confidence intervals")
 ```
+
 
 The difference between the mean number of occurrences and the expected number of occurrences can be seen as a measure of convergence error. 
 
@@ -284,7 +289,9 @@ for (i in seq_len(length(unique(final_df$sim)))) {
 }
 
 cum_median_df <- do.call(rbind.data.frame, out)
+```
 
+```{r}
 cum_median_df %>%
   ggplot(aes(x = sim, y = median_n, colour = as.factor(id), group = id)) +
     geom_line() +
@@ -327,7 +334,9 @@ for (i in seq_len(length(unique(final_df$sim)))) {
 }
 
 occupancy_df <- do.call(rbind.data.frame, out)
+```
 
+```{r}
 occupancy_df %>%
   ggplot(aes(x = sim, y = p, colour = as.factor(id), group = id)) +
     geom_line() +
@@ -373,6 +382,4 @@ occupancy_df %>%
     labs(x = "number of simulations", 
          y = "number of occupied grid cells",
          colour = "threshold")
-
 ```
-
