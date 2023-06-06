@@ -199,3 +199,25 @@ occupancy_prob_df <- occupancy_prob_df %>%
   ungroup() %>%
   filter(occupancy == 1)
 ```
+
+## Visualise simulations
+
+```{r}
+example_cells <- 14:25
+```
+
+Example for grid cells `r example_cells`
+
+```{r}
+final_df %>% 
+  filter(id %in% example_cells) %>%
+  mutate(occupancy = ifelse(n == 0, "0", ">1")) %>%
+  ggplot(aes(x = n)) + 
+    geom_bar(aes(fill = occupancy)) +
+    geom_text(data = summary_df %>% filter(id %in% example_cells), 
+              aes(x = 3, y = 750, label = paste0("mean: ", mean_n, "\n",
+                                                 "sd: ", round(sd_n, 3), "\n",
+                                                 "median: ", median_n))) +
+    facet_wrap(~id) +
+    labs(y = "frequency")
+```
