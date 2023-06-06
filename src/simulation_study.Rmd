@@ -177,3 +177,20 @@ full_join(grid_df, occupancy_prob_df, by = join_by(id)) %>%
   labs(fill = "P(n >=1)", title = "Probability of occupancy",
        x = "", y = "")
 ```
+
+# Convergence
+
+```{r}
+cum_mean_df <- final_df %>%
+  group_by(id) %>%
+  arrange(id, sim) %>%
+  mutate(mean_n = cummean(n))
+
+cum_mean_df %>%
+  ggplot(aes(x = sim, y = mean_n, colour = as.factor(id), group = id)) +
+    geom_line() +
+    scale_x_continuous(breaks = seq(0, 1000, 100)) +
+    theme(legend.position = "") +
+    labs(x = "number of simulations", y = "mean number of\noccurrences per grid")
+```
+
