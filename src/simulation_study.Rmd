@@ -20,3 +20,42 @@ library(sf)
 library(tidyverse)
 ```
 
+# Simulate data
+
+First we simulate points.
+
+```{r}
+# Simulate points
+sim_points <- function(n, xlim = c(62000, 63000), ylim = c(182000, 183000),
+                       add_points = NULL, seed = 123) {
+  set.seed(123)
+  if (!is.null(add_points)) {
+    out <- tibble(
+        lat = runif(n, ylim[1], ylim[2]),
+        long = runif(n, xlim[1], xlim[2])) %>%
+      bind_rows(add_points[,1:2]) %>%
+      st_as_sf(coords = c("long", "lat"), crs = st_crs(31370)) %>%
+      mutate(coordinateUncertaintyInMeters = 
+               c(abs(rnorm(10, 100, 500)), 
+                 add_points$coordinateUncertaintyInMeters))
+  } else {
+    out <- tibble(
+        lat = runif(n, ylim[1], ylim[2]),
+        long = runif(n, xlim[1], xlim[2])) %>%
+      st_as_sf(coords = c("long", "lat"), crs = st_crs(31370)) %>%
+      mutate(coordinateUncertaintyInMeters = abs(rnorm(10, 100, 500)))
+  }
+
+  out %>%
+    cbind(st_coordinates(out)) %>%
+    rename(x = X, y = Y)
+}
+```
+
+```{r}
+test_points <- sim_points(10, add_points = tibble(lat = 183900, long = 64000,
+                          coordinateUncertaintyInMeters = 50))
+
+test_circles <- test_points %>%
+  st_buffer(test_points$coordinateUncertaintyInMeters)
+```
