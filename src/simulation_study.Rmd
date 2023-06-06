@@ -255,6 +255,50 @@ cum_median_df %>%
     geom_line() +
     scale_x_continuous(breaks = seq(0, 1000, 100)) +
     theme(legend.position = "") +
-    labs(x = "number of simulations", y = "median number of\noccurrences per grid")
+    labs(x = "number of simulations", 
+         y = "median number of\noccurrences per grid")
+```
+
+Occupancy probability seems to become stable after 800 simulations.
+
+```{r}
+out <- vector(mode = "list", length = length(unique(final_df$sim)))
+
+for (i in seq_len(length(unique(final_df$sim)))) {
+  occupancy_temp <- final_df %>%
+    filter(sim <= i) %>%
+    arrange(id) %>%
+    count(id, n, name = "total") %>%
+    group_by(id) %>% 
+    mutate(occupancy = ifelse(n == 0, 0, 1)) %>%
+    group_by(id, occupancy) %>%
+    summarise(n = sum(total), .groups = "drop") %>%
+    group_by(id) %>%
+    mutate(sum = sum(n)) %>%
+    ungroup() %>%
+    mutate(p = n / sum)
+
+  design_temp <-  occupancy_temp %>%
+    expand(id, occupancy)
+  
+  out[[i]] <- occupancy_temp %>%
+    full_join(design_temp, by = join_by(id, occupancy)) %>%
+    mutate(across(where(is.numeric), ~ coalesce(.x, 0))) %>%
+    group_by(id) %>%
+    mutate(sum = sum(n)) %>%
+    ungroup() %>%
+    filter(occupancy == 1) %>% 
+    mutate(sim = i)
+}
+
+occupancy_df <- do.call(rbind.data.frame, out)
+
+occupancy_df %>%
+  ggplot(aes(x = sim, y = p, colour = as.factor(id), group = id)) +
+    geom_line() +
+    scale_x_continuous(breaks = seq(0, 1000, 100)) +
+    theme(legend.position = "") +
+    labs(x = "number of simulations", 
+         y = "probability of occupancy per grid")
 ```
 
