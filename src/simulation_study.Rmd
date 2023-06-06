@@ -202,7 +202,37 @@ cum_mean_df %>%
          y = "mean number of\noccurrences per grid")
 ```
 
-The difference between the mean number of occurrences and the expected number of occurrences can be seen as a measure of error. 
+The 95% confidence intervals around the mean (based on 1000 bootstrap samples) is also especially variable in the first 200 simulations.
+
+```{r, cache=TRUE}
+out <- vector(mode = "list", length = length(unique(final_df$sim)))
+
+for (i in seq_len(length(unique(final_df$sim)))) {
+  out[[i]] <- final_df %>%
+    filter(sim <= i) %>%
+    arrange(id) %>%
+    group_by(id) %>%
+    summarise(mean_n = mean_cl_boot(n, conf.int = .95)) %>% 
+    mutate(sim = i)
+}
+
+cum_mean_df2 <- do.call(rbind.data.frame, out)
+
+cum_mean_df2 %>%
+  group_by(id) %>%
+  mutate(sum = sum(mean_n$y)) %>%
+  ungroup() %>%
+  filter(sum != 0) %>%
+  ggplot(aes(x = sim, y = mean_n$y, colour = as.factor(id), group = id)) +
+    geom_errorbar(aes(ymin = mean_n$ymin, ymax = mean_n$ymax)) +
+    geom_point(size = 0.05, colour = alpha("lightgrey", 0.1)) +
+    scale_x_continuous(breaks = seq(0, 1000, 100)) +
+    theme(legend.position = "") +
+    labs(x = "number of simulations", 
+         y = "median number of\noccurrences per grid")
+```
+
+The difference between the mean number of occurrences and the expected number of occurrences can be seen as a measure of convergence error. 
 
 ```{r}
 cum_mean_df %>%
