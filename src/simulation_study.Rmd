@@ -59,3 +59,28 @@ test_points <- sim_points(10, add_points = tibble(lat = 183900, long = 64000,
 test_circles <- test_points %>%
   st_buffer(test_points$coordinateUncertaintyInMeters)
 ```
+
+We create a custom grid around the points.
+
+```{r}
+# Create grid
+create_grid <- function(spacing, circles) {
+  grid_spacing <- spacing  # size of squares, in units of the CRS
+  grid <- st_make_grid(circles, square = T, 
+                       cellsize = c(grid_spacing, grid_spacing)) %>%
+    st_as_sf() %>%
+    mutate(id = row_number())
+  
+  return(grid)
+}
+
+grid_df <- create_grid(500, test_circles)
+```
+
+Visualisation:
+
+```{r}
+ggplot() +
+  geom_sf(data = grid_df) +
+  geom_sf(data = test_circles, fill = alpha("white", 0))
+```
