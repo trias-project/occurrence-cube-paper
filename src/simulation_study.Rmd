@@ -302,3 +302,42 @@ occupancy_df %>%
          y = "probability of occupancy per grid")
 ```
 
+## Grid statistics
+
+How variable is the total number of occupied grid cells?
+A grid cell $j$ ($j = 1, ..., j$) is occupied when the probability of occupancy $p$ is above a certain threshold $t$, such that the total number of occupied cells $N$
+
+$$
+N = \sum_{j=1}^J I(p_j \geq t)
+$$
+
+We compare different thresholds.
+
+```{r}
+occupancy_df %>%
+  mutate(occupancy_10 = ifelse(p >= 0.1, 1, 0),
+         occupancy_20 = ifelse(p >= 0.2, 1, 0),
+         occupancy_30 = ifelse(p >= 0.3, 1, 0),
+         occupancy_40 = ifelse(p >= 0.4, 1, 0),
+         occupancy_50 = ifelse(p >= 0.5, 1, 0),
+         occupancy_60 = ifelse(p >= 0.6, 1, 0),
+         occupancy_70 = ifelse(p >= 0.7, 1, 0),
+         occupancy_80 = ifelse(p >= 0.8, 1, 0),
+         occupancy_90 = ifelse(p >= 0.9, 1, 0)) %>% 
+  group_by(sim) %>%
+  summarise(across(starts_with("occupancy_"), sum)) %>%
+  pivot_longer(cols = starts_with("occupancy_"), 
+               names_to = "threshold", values_to = "n") %>%
+  separate(col = threshold, into = c("name", "threshold")) %>%
+  mutate(threshold = factor(as.numeric(threshold) / 100, ordered = TRUE)) %>%
+  select(-name) %>%
+  ggplot(aes(x = sim, y = n, colour = threshold, group = threshold)) +
+    geom_line() +
+    scale_x_continuous(breaks = seq(0, 1000, 100)) +
+    scale_y_continuous(breaks = seq(0, 20, 2), limits = c(0, NA)) +
+    labs(x = "number of simulations", 
+         y = "number of occupied grid cells",
+         colour = "threshold")
+
+```
+
