@@ -181,7 +181,54 @@ full_join(grid_df, occupancy_prob_df, by = join_by(id)) %>%
        x = "", y = "")
 ```
 
-> distribution of occupied grid cells ...
+We also visualise the distribution of occupied grid cells.
+
+```{r}
+occupancy_df <- final_df %>%
+  mutate(occupancy = ifelse(n == 0, 0, 1)) %>%
+  group_by(sim) %>%
+  summarise(n = sum(occupancy)) %>%
+  mutate(year = factor(2022))
+```
+
+```{r}
+occupancy_df %>%
+  ggplot(aes(x = n)) +
+    geom_bar() +
+    labs(x = "number of occupied grid cells",
+         y = "frequency")
+```
+
+We create a second set of occurrence cubes to represent a different year.
+We can take the average of the distribution with an 95 % confidence interval by bootstrapping.
+This is just an example to show how we can deal with the data.
+
+```{r}
+test_points2 <- sim_points(10, seed = 1234)
+
+test_circles2 <- test_points2 %>%
+  st_buffer(test_points$coordinateUncertaintyInMeters)
+
+grid_df2 <- create_grid(500, test_circles2)
+
+final_df2 <- sim_cubes(sims, test_points2, grid_df2)
+
+occupancy_df2 <- final_df2 %>%
+  mutate(occupancy = ifelse(n == 0, 0, 1)) %>%
+  group_by(sim) %>%
+  summarise(n = sum(occupancy)) %>%
+  mutate(year = factor(2023))
+```
+
+```{r}
+occupancy_df %>%
+  bind_rows(occupancy_df2) %>%
+  ggplot(aes(x = year, y = n, colour = year)) +
+    stat_summary(fun.data = "mean_cl_boot") +
+    labs(x = "", 
+         y = "number of occupied grid cells")
+```
+
 
 # Convergence
 ## Grid cell statistics
