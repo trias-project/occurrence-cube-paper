@@ -1,4 +1,4 @@
-# Simulate points
+# Function to simulate points
 sim_points <- function(n, xlim = c(62000, 63000), ylim = c(182000, 183000),
                        add_points = NULL, seed = 123) {
   set.seed(seed)
@@ -22,4 +22,15 @@ sim_points <- function(n, xlim = c(62000, 63000), ylim = c(182000, 183000),
   out %>%
     cbind(st_coordinates(out)) %>%
     rename(x = X, y = Y)
+}
+
+# Function to create grid around points with uncertainties
+create_grid <- function(spacing, circles) {
+  grid_spacing <- spacing  # size of squares, in units of the CRS
+  grid <- st_make_grid(circles, square = T,
+                       cellsize = c(grid_spacing, grid_spacing)) %>%
+    st_as_sf() %>%
+    mutate(id = row_number())
+
+  return(grid)
 }
