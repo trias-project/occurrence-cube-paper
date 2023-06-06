@@ -145,3 +145,57 @@ sim_cubes <- function(n_sim, points, grid, seed = 123, print = 100) {
 ```{r}
 final_df <- sim_cubes(1000, test_points, grid_df)
 ```
+
+
+## Calculate statistics
+
+```{r}
+# Summary statistics
+summary_df <- final_df %>%
+  group_by(id) %>%
+  summarise(mean_n = mean(n),
+            sd_n = sd(n),
+            median_n = median(n),
+            iqr_n = IQR(n))
+
+# Calculate effective number of occurrences
+int_grid_circle <- test_circles %>%
+  mutate(circle_area = st_area(test_circles),
+         point_id = row_number()) %>%
+  st_intersection(grid_df)
+
+props <- int_grid_circle %>%
+  mutate(area = st_area(int_grid_circle),
+         prop = area / circle_area)
+
+summary_grid_props <- props %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  summarise(expected_n = sum(prop)) %>%
+  full_join(grid_df, by = join_by(id)) %>%
+  st_as_sf() %>%
+  mutate(expected_n = ifelse(is.na(expected_n), 0, expected_n))
+
+# Calculate probability of occupancy
+occupancy_prob_df <- final_df %>% 
+  count(id, n, name = "total") %>%
+  group_by(id) %>% 
+  mutate(occupancy = ifelse(n == 0, 0, 1)) %>%
+  group_by(id, occupancy) %>%
+  summarise(n = sum(total)) %>%
+  group_by(id) %>%
+  mutate(sum = sum(n)) %>%
+  ungroup() %>%
+  mutate(p = n / sum)
+
+design <-  occupancy_prob_df %>%
+  expand(id, occupancy)
+
+occupancy_prob_df <- occupancy_prob_df %>%
+  full_join(design, by = join_by(id, occupancy)) %>%
+  mutate(across(where(is.numeric), ~ coalesce(.x, 0))) %>%
+  group_by(id) %>%
+  mutate(sum = sum(n)) %>%
+  ungroup() %>%
+  filter(occupancy == 1)
+```
