@@ -208,14 +208,53 @@ We can take the average of the distribution with an 95 % confidence interval by 
 This is just an example to show how we can deal with the data.
 
 ```{r}
-test_points2 <- sim_points(10, seed = 1234)
+test_points2 <- sim_points(9, seed = 1235)
 
 test_circles2 <- test_points2 %>%
   st_buffer(test_points$coordinateUncertaintyInMeters)
 
-grid_df2 <- create_grid(500, test_circles2)
+final_df2 <- sim_cubes(sims, test_points2, grid_df)
 
-final_df2 <- sim_cubes(sims, test_points2, grid_df2)
+# Calculate effective number of occurrences
+int_grid_circle2 <- test_circles2 %>%
+  mutate(circle_area = st_area(test_circles2),
+         point_id = row_number()) %>%
+  st_intersection(grid_df)
+
+props2 <- int_grid_circle2 %>%
+  mutate(area = st_area(int_grid_circle2),
+         prop = area / circle_area)
+
+summary_grid_props2 <- props2 %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  summarise(expected_n = sum(prop)) %>%
+  full_join(grid_df, by = join_by(id)) %>%
+  st_as_sf() %>%
+  mutate(expected_n = ifelse(is.na(expected_n), 0, expected_n))
+
+# Calculate probability of occupancy
+occupancy_prob_df2 <- final_df2 %>% 
+  count(id, n, name = "total") %>%
+  group_by(id) %>% 
+  mutate(occupancy = ifelse(n == 0, 0, 1)) %>%
+  group_by(id, occupancy) %>%
+  summarise(n = sum(total)) %>%
+  group_by(id) %>%
+  mutate(sum = sum(n)) %>%
+  ungroup() %>%
+  mutate(p = n / sum)
+
+design <-  occupancy_prob_df2 %>%
+  expand(id, occupancy)
+
+occupancy_prob_df2 <- occupancy_prob_df2 %>%
+  full_join(design, by = join_by(id, occupancy)) %>%
+  mutate(across(where(is.numeric), ~ coalesce(.x, 0))) %>%
+  group_by(id) %>%
+  mutate(sum = sum(n)) %>%
+  ungroup() %>%
+  filter(occupancy == 1)
 
 occupancy_df2 <- final_df2 %>%
   mutate(occupancy = ifelse(n == 0, 0, 1)) %>%
@@ -237,48 +276,87 @@ occupancy_df %>%
 
 How can we decide on a threshold for species occupancy and abundance to use for modelling?
 
-1.    Based on the distribution of occupied grid cells we see that 7 occupied grid cells is the most probable
+1.    Based on the distribution of occupied grid cells we see that 7 occupied grid cells is the most probable for 2022 and 6 for 2023
 
 ```{r}
 occupancy_df %>%
+  bind_rows(occupancy_df2) %>%
   ggplot(aes(x = n)) +
     geom_bar() +
     labs(x = "number of occupied grid cells",
-         y = "frequency")
+         y = "frequency") +
+    facet_wrap(~year)
 ```
 
 
-2.   We select the 7 grid cells with the highest probability of occupancy
+2.   We select the resp. 7, 6 grid cells with the highest probability of occupancy
 
 ```{r}
+ids_2022 <- full_join(grid_df, occupancy_prob_df, by = join_by(id)) %>%
+  arrange(desc(p)) %>%
+  head(7) %>%
+  pull(id)
+
+ids_2023 <- full_join(grid_df, occupancy_prob_df2, by = join_by(id)) %>%
+  arrange(desc(p)) %>%
+  head(6) %>%
+  pull(id)
+
 full_join(grid_df, occupancy_prob_df, by = join_by(id)) %>%
-  mutate(p = ifelse(p < 0.3, NA, p)) %>%
+  mutate(p = ifelse(id %in% ids_2022, p, NA),
+         year = 2022) %>%
+  bind_rows(full_join(grid_df, occupancy_prob_df2, by = join_by(id)) %>%
+                mutate(p = ifelse(id %in% ids_2023, p, NA),
+                       year = 2023)) %>%
   ggplot() +
   geom_sf(aes(fill = p)) +
   geom_sf_text(aes(label = round(p, 3))) +
-  geom_sf(data = test_circles, fill = alpha("white", 0), 
+  geom_sf(data = bind_rows(test_circles %>% mutate(year = 2022),
+                           test_circles2 %>% mutate(year = 2023)), 
+          fill = alpha("white", 0), 
           colour = "firebrick") +
   labs(fill = "P(n >=1)", title = "Probability of occupancy",
-       x = "", y = "")
+       x = "", y = "") +
+  facet_wrap(~year)
 ```
 
-3.    These cells need to have 11 occurrences in total. We get this by rounding up the expected number of occurrences in the selected grid cells
+3.    How many occurrences do we have in these cells? We create an iterative algorithm that meets the following rules:
+      -   Only the selected grid cells may contain occurrences
+      -   The total number of occurrences to designate is limited by the total number of occurrences per dataset
+          -   11 for 2022
+          -   9 for 2023
 
 ```{r}
-summary_grid_props %>%
-  mutate(expected_n = ifelse(expected_n < 0.4, NA, expected_n),
-         n = ifelse(is.na(expected_n), 0, ceiling(expected_n))) %>%
-  pivot_longer(cols = c(expected_n, n), 
+# We need a data frame with a column containing the total number of occurrences
+# per group (column with grouping variable, here 'year')
+iteration_df <- bind_rows(
+  summary_grid_props %>% 
+    mutate(year = 2022,
+           total = 11,
+           expected_n = ifelse(id %in% ids_2022, expected_n, NA)), 
+  summary_grid_props2  %>% 
+    mutate(year = 2023,
+           total = 9,
+           expected_n = ifelse(id %in% ids_2023, expected_n, NA)))
+
+final_occurrence_df <- iterate_occurrences(iteration_df, "total", "year")
+```
+
+```{r}
+final_occurrence_df %>%
+  pivot_longer(cols = c(expected_n, counting), 
                names_to = "measure", values_to = "n") %>%
   st_as_sf() %>%
   ggplot() +
     geom_sf(aes(fill = n)) +
     geom_sf_text(aes(label = round(n, 3))) +
-    geom_sf(data = test_circles, fill = alpha("white", 0), 
-            colour = "firebrick") +
+  geom_sf(data = bind_rows(test_circles %>% mutate(year = 2022),
+                           test_circles2 %>% mutate(year = 2023)), 
+          fill = alpha("white", 0), 
+          colour = "firebrick") +
     scale_fill_gradient2() +
     labs(fill = "number of occurrences", x = "", y = "") +
-    facet_wrap(~measure, ncol = 2) +
+    facet_grid(year~measure) +
     theme(legend.position = "bottom")
 ```
 
@@ -300,6 +378,32 @@ summary_grid_props %>%
     labs(fill = "number of occurrences", x = "", y = "") +
     facet_wrap(~measure, ncol = 2) +
     theme(legend.position = "")
+```
+
+
+```{r}
+dat <- summary_grid_props %>%
+  st_drop_geometry() %>%
+  mutate(expected_n = ifelse(expected_n < 0.4, NA, expected_n),
+         abundance = ifelse(is.na(expected_n), 0, ceiling(expected_n)),
+         occupancy = ifelse(abundance == 0, 0, 1))
+
+# MCMC parameters
+nchains <- 3           # number of chains
+niter <- 4000          # number of iterations (incl. burn-in)
+burnin <- niter / 2    # number of initial samples to discard (burn-in)
+nparallel <- nchains   # number of cores used for parallel computing
+
+fit <- brm(bf(abundance ~ 1), data = dat, 
+           family = zero_inflated_poisson(), 
+           chains = nchains, warmup = burnin, iter = niter, 
+           cores = nparallel)
+
+plot(fit)
+
+pp_check(fit,
+  type = "bars", ndraws = 100
+)
 ```
 
 

@@ -9,14 +9,14 @@ sim_points <- function(n, xlim = c(62000, 63000), ylim = c(182000, 183000),
       bind_rows(add_points[,1:2]) %>%
       st_as_sf(coords = c("long", "lat"), crs = st_crs(31370)) %>%
       mutate(coordinateUncertaintyInMeters =
-               c(abs(rnorm(10, 100, 500)),
+               c(abs(rnorm(n, 100, 500)),
                  add_points$coordinateUncertaintyInMeters))
   } else {
     out <- tibble(
       lat = runif(n, ylim[1], ylim[2]),
       long = runif(n, xlim[1], xlim[2])) %>%
       st_as_sf(coords = c("long", "lat"), crs = st_crs(31370)) %>%
-      mutate(coordinateUncertaintyInMeters = abs(rnorm(10, 100, 500)))
+      mutate(coordinateUncertaintyInMeters = abs(rnorm(n, 100, 500)))
   }
 
   out %>%
@@ -83,4 +83,53 @@ sim_cubes <- function(n_sim, points, grid, seed = 123, print = 100) {
     mutate(n = ifelse(is.na(n), 0, n))
 
   return(out_df)
+}
+
+# Function to iterate over expected number of occurrences
+iterate_occurrences <- function(iter_df, total_var, grouping_var) {
+  if ("sf" %in% class(iter_df)) {
+    merge_df <- iter_df
+    iter_df <- iter_df %>%
+      st_drop_geometry()
+  } else {
+    merge_df <- iter_df
+    iter_df <- iter_df %>%
+      st_drop_geometry()
+  }
+  out <- vector(mode = "list", length = nrow(distinct(iter_df[grouping_var])))
+  # Loop over grouping variable
+  for (i in seq_along(pull(distinct(test[grouping_var])))) {
+    # Filter data
+    y <- pull(distinct(test[grouping_var]))[i]
+    df <- iter_df %>%
+      filter(year == y,
+             !is.na(expected_n)) %>%
+      mutate(counting = floor(expected_n + 1e-6)) %>%
+      mutate(iter = expected_n - counting)
+    # Set minimum
+    count <- sum(df$counting)
+    iter <- 1
+    # Set maximum
+    total <- df[total_var] %>%
+      distinct() %>%
+      pull()
+
+    print(paste0("Iteration ", iter, ", year ", y, ": count ", count))
+    while (count != total) {
+      id_to_count <- df$id[df$iter == max(df$iter)]
+      df <- df %>%
+        mutate(counting = ifelse(id == id_to_count, counting + 1, counting),
+               iter = expected_n - counting)
+      count <- sum(df$counting)
+      iter <- iter + 1
+      print(paste0("Iteration ", iter, ", year ", y, ": count ", count))
+    }
+
+    out[[i]] <- merge_df %>%
+      filter(year == y) %>%
+      full_join(df) %>%
+      mutate(counting = ifelse(is.na(counting), 0, counting))
+  }
+
+  return(do.call(rbind.data.frame, out))
 }
