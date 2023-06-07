@@ -13,15 +13,17 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
+library(here)
 library(knitr)
 opts_chunk$set(echo = TRUE,
-               warning = FALSE)
+               warning = FALSE,
+               message = FALSE)
 opts_knit$set(root.dir = here::here())
 
 library(sf)
 library(tidyverse)
 
-source("src/simulation_functions.R")
+source(here("src", "simulation_functions.R"))
 ```
 
 # Simulate data
@@ -73,7 +75,7 @@ summary_df <- final_df %>%
   summarise(mean_n = mean_cl_boot(n, conf.int = .95),
             sd_n = sd(n),
             median_n = median(n),
-            iqr_n = IQR(n)) %>%
+            iqr_n = IQR(n), .groups = "drop") %>%
   unnest(cols = c(mean_n)) %>%
   rename(mean_n = y, mean_min = ymin, mean_max = ymax)
 
@@ -231,6 +233,75 @@ occupancy_df %>%
          y = "number of occupied grid cells")
 ```
 
+# Using the cubes
+
+How can we decide on a threshold for species occupancy and abundance to use for modelling?
+
+1.    Based on the distribution of occupied grid cells we see that 7 occupied grid cells is the most probable
+
+```{r}
+occupancy_df %>%
+  ggplot(aes(x = n)) +
+    geom_bar() +
+    labs(x = "number of occupied grid cells",
+         y = "frequency")
+```
+
+
+2.   We select the 7 grid cells with the highest probability of occupancy
+
+```{r}
+full_join(grid_df, occupancy_prob_df, by = join_by(id)) %>%
+  mutate(p = ifelse(p < 0.3, NA, p)) %>%
+  ggplot() +
+  geom_sf(aes(fill = p)) +
+  geom_sf_text(aes(label = round(p, 3))) +
+  geom_sf(data = test_circles, fill = alpha("white", 0), 
+          colour = "firebrick") +
+  labs(fill = "P(n >=1)", title = "Probability of occupancy",
+       x = "", y = "")
+```
+
+3.    These cells need to have 11 occurrences in total. We get this by rounding up the expected number of occurrences in the selected grid cells
+
+```{r}
+summary_grid_props %>%
+  mutate(expected_n = ifelse(expected_n < 0.4, NA, expected_n),
+         n = ifelse(is.na(expected_n), 0, ceiling(expected_n))) %>%
+  pivot_longer(cols = c(expected_n, n), 
+               names_to = "measure", values_to = "n") %>%
+  st_as_sf() %>%
+  ggplot() +
+    geom_sf(aes(fill = n)) +
+    geom_sf_text(aes(label = round(n, 3))) +
+    geom_sf(data = test_circles, fill = alpha("white", 0), 
+            colour = "firebrick") +
+    scale_fill_gradient2() +
+    labs(fill = "number of occurrences", x = "", y = "") +
+    facet_wrap(~measure, ncol = 2) +
+    theme(legend.position = "bottom")
+```
+
+4.    We now have both occupancy as well as abundance data to start modelling. This example is for 1 species in 1 year. Real life data can have multiple years and species (data cube)
+
+```{r}
+summary_grid_props %>%
+  mutate(expected_n = ifelse(expected_n < 0.4, NA, expected_n),
+         abundance = as.character(ifelse(is.na(expected_n), 0, 
+                                         ceiling(expected_n))),
+         occupancy = ifelse(abundance == 0, "absent", "present")) %>%
+  select(-expected_n) %>%
+  pivot_longer(cols = c(abundance, occupancy), 
+               names_to = "measure", values_to = "n") %>%
+  st_as_sf() %>%
+  ggplot() +
+    geom_sf(aes(fill = n)) +
+    geom_sf_text(aes(label = n)) +
+    labs(fill = "number of occurrences", x = "", y = "") +
+    facet_wrap(~measure, ncol = 2) +
+    theme(legend.position = "")
+```
+
 
 # Convergence
 ## Grid cell statistics
@@ -382,11 +453,11 @@ for (i in seq_len(length(unique(final_df$sim)))) {
     mutate(sim = i)
 }
 
-occupancy_df <- do.call(rbind.data.frame, out)
+cum_occupancy_df <- do.call(rbind.data.frame, out)
 ```
 
 ```{r}
-occupancy_df %>%
+cum_occupancy_df %>%
   ggplot(aes(x = sim, y = p, colour = as.factor(id), group = id)) +
     geom_line() +
     scale_x_continuous(breaks = seq(0, 1000, 100)) +
@@ -407,7 +478,7 @@ $$
 We compare different thresholds.
 
 ```{r}
-occupancy_df %>%
+cum_occupancy_df %>%
   mutate(occupancy_10 = ifelse(p >= 0.1, 1, 0),
          occupancy_20 = ifelse(p >= 0.2, 1, 0),
          occupancy_30 = ifelse(p >= 0.3, 1, 0),
