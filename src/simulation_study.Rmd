@@ -22,6 +22,9 @@ opts_knit$set(root.dir = here::here())
 
 library(sf)
 library(tidyverse)
+library(brms)
+library(emmeans)
+library(tidybayes)
 
 source(here("src", "simulation_functions.R"))
 ```
@@ -276,7 +279,7 @@ occupancy_df %>%
 
 How can we decide on a threshold for species occupancy and abundance to use for modelling?
 
-1.    Based on the distribution of occupied grid cells we see that 7 occupied grid cells is the most probable for 2022 and 6 for 2023
+1.  Based on the distribution of occupied grid cells we see that 7 occupied grid cells is the most probable for 2022 and 6 for 2023
 
 ```{r}
 occupancy_df %>%
@@ -289,7 +292,7 @@ occupancy_df %>%
 ```
 
 
-2.   We select the resp. 7, 6 grid cells with the highest probability of occupancy
+2.  We select the resp. 7, 6 grid cells with the highest probability of occupancy
 
 ```{r}
 ids_2022 <- full_join(grid_df, occupancy_prob_df, by = join_by(id)) %>%
@@ -320,11 +323,11 @@ full_join(grid_df, occupancy_prob_df, by = join_by(id)) %>%
   facet_wrap(~year)
 ```
 
-3.    How many occurrences do we have in these cells? We create an iterative algorithm that meets the following rules:
-      -   Only the selected grid cells may contain occurrences
-      -   The total number of occurrences to designate is limited by the total number of occurrences per dataset
-          -   11 for 2022
-          -   9 for 2023
+3.  How many occurrences do we have in these cells? We create an iterative algorithm that meets the following rules:
+    -   Only the selected grid cells may contain occurrences
+    -   The total number of occurrences to designate is limited by the total number of occurrences per dataset
+        -   11 for 2022
+        -   9 for 2023
 
 ```{r}
 # We need a data frame with a column containing the total number of occurrences
@@ -360,33 +363,31 @@ final_occurrence_df %>%
     theme(legend.position = "bottom")
 ```
 
-4.    We now have both occupancy as well as abundance data to start modelling. This example is for 1 species in 1 year. Real life data can have multiple years and species (data cube)
+4.  We now have both occupancy as well as abundance data to start modelling
 
 ```{r}
-summary_grid_props %>%
-  mutate(expected_n = ifelse(expected_n < 0.4, NA, expected_n),
-         abundance = as.character(ifelse(is.na(expected_n), 0, 
-                                         ceiling(expected_n))),
-         occupancy = ifelse(abundance == 0, "absent", "present")) %>%
-  select(-expected_n) %>%
+final_occurrence_df %>%
+  mutate(abundance = as.character(counting),
+         occupancy = ifelse(counting == 0, "absent", "present")) %>%
   pivot_longer(cols = c(abundance, occupancy), 
                names_to = "measure", values_to = "n") %>%
   st_as_sf() %>%
   ggplot() +
     geom_sf(aes(fill = n)) +
-    geom_sf_text(aes(label = n)) +
+    geom_sf_text(aes(label = n), size = 3) +
     labs(fill = "number of occurrences", x = "", y = "") +
-    facet_wrap(~measure, ncol = 2) +
+    facet_grid(year~measure) +
     theme(legend.position = "")
 ```
 
+5.  Modelling exercise
 
 ```{r}
-dat <- summary_grid_props %>%
+dat <- final_occurrence_df %>%
   st_drop_geometry() %>%
-  mutate(expected_n = ifelse(expected_n < 0.4, NA, expected_n),
-         abundance = ifelse(is.na(expected_n), 0, ceiling(expected_n)),
-         occupancy = ifelse(abundance == 0, 0, 1))
+  mutate(abundance = counting,
+         occupancy = ifelse(counting == 0, 0, 1),
+         year = as.factor(year))
 
 # MCMC parameters
 nchains <- 3           # number of chains
@@ -394,16 +395,44 @@ niter <- 4000          # number of iterations (incl. burn-in)
 burnin <- niter / 2    # number of initial samples to discard (burn-in)
 nparallel <- nchains   # number of cores used for parallel computing
 
-fit <- brm(bf(abundance ~ 1), data = dat, 
+fit <- brm(bf(abundance ~ year), data = dat, 
            family = zero_inflated_poisson(), 
            chains = nchains, warmup = burnin, iter = niter, 
            cores = nparallel)
+```
 
+Model convergence is good:
+
+```{r}
 plot(fit)
+```
 
-pp_check(fit,
-  type = "bars", ndraws = 100
-)
+Model fit is good:
+
+```{r}
+pp_check(fit, type = "bars_grouped", ndraws = 100 , group = "year",
+         facet_args = list(ncol = 1, scales = "free_y"))
+```
+
+The estimated abundance over the complete grid is not significantly lower between the two years.
+
+```{r}
+hyp <- hypothesis(x = fit,
+  "year2023 = 0",
+  class = "b", alpha = 0.05)
+plot(hyp)
+hyp
+```
+
+```{r}
+fit %>%
+  emmeans(~ year) %>%
+  gather_emmeans_draws() %>%
+  mutate(abundance = exp(.value)) %>%
+  ggplot(aes(y = abundance, x = year, fill = year)) +
+    stat_eye() +
+    labs(x = "", y = "estimated abundance over complete grid") +
+    theme(legend.position = "")
 ```
 
 
