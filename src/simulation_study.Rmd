@@ -13,13 +13,15 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE,
-                      warning = FALSE)
+library(knitr)
+opts_chunk$set(echo = TRUE,
+               warning = FALSE)
+opts_knit$set(root.dir = here::here())
 
 library(sf)
 library(tidyverse)
 
-source("../src/simulation_functions.R")
+source("src/simulation_functions.R")
 ```
 
 # Simulate data
@@ -137,7 +139,7 @@ final_df %>%
                 "mean: ", mean_n, "\n",
                 "ll_ci: ", round(mean_min, 3)))) +
     facet_wrap(~id) +
-    labs(y = "frequency", x = "number of observations per grid")
+    labs(y = "frequency", x = "number of observations per grid cell")
 ```
 
 
@@ -251,7 +253,7 @@ cum_mean_df %>%
     scale_x_continuous(breaks = seq(0, 1000, 100)) +
     theme(legend.position = "") +
     labs(x = "number of simulations", 
-         y = "mean number of\noccurrences per grid")
+         y = "mean number of\noccurrences per grid cell")
 ```
 
 The 95% confidence intervals around the mean (based on 1000 bootstrap samples) is also especially variable in the first 200 simulations.
@@ -318,7 +320,7 @@ cum_mean_df %>%
       scale_x_continuous(breaks = seq(0, 1000, 100)) +
       theme(legend.position = "") +
       labs(x = "number of simulations", 
-           y = "total error on mean\nnumber of occurrences per grid")
+           y = "total error on mean\nnumber of occurrences per grid cell")
 ```
 
 The median number of occurrences per grid cell seems to become stable after 600 simulations.
@@ -345,7 +347,7 @@ cum_median_df %>%
     scale_x_continuous(breaks = seq(0, 1000, 100)) +
     theme(legend.position = "") +
     labs(x = "number of simulations", 
-         y = "median number of\noccurrences per grid")
+         y = "median number of\noccurrences per grid cell")
 ```
 
 Occupancy probability seems to become stable after 800 simulations.
@@ -390,7 +392,7 @@ occupancy_df %>%
     scale_x_continuous(breaks = seq(0, 1000, 100)) +
     theme(legend.position = "") +
     labs(x = "number of simulations", 
-         y = "probability of occupancy per grid")
+         y = "probability of occupancy per grid cell")
 ```
 
 ## Grid statistics
