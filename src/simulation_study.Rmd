@@ -462,21 +462,29 @@ cum_mean_df %>%
 
 The 95% confidence intervals around the mean (based on 1000 bootstrap samples) is also especially variable in the first 200 simulations.
 
-```{r, cache=TRUE}
-out <- vector(mode = "list", length = length(unique(final_df$sim)))
-
-for (i in seq_len(length(unique(final_df$sim)))) {
-  out[[i]] <- final_df %>%
-    filter(sim <= i) %>%
-    arrange(id) %>%
-    group_by(id) %>%
-    summarise(mean_n = mean_cl_boot(n, conf.int = .95)) %>% 
-    mutate(sim = i)
+```{r}
+dir.create(here("src", "simulation_study_cache"), showWarnings = FALSE)
+file <- here("src", "simulation_study_cache", "bootstrapped_mean.Rds")
+if (file.exists(file)) {
+  cum_mean_df2 <- readRDS(file)
+} else {
+  out <- vector(mode = "list", length = length(unique(final_df$sim)))
+  
+  for (i in seq_len(length(unique(final_df$sim)))) {
+    out[[i]] <- final_df %>%
+      filter(sim <= i) %>%
+      arrange(id) %>%
+      group_by(id) %>%
+      summarise(mean_n = mean_cl_boot(n, conf.int = .95)) %>% 
+      mutate(sim = i)
+  }
+  
+  cum_mean_df2 <- do.call(rbind.data.frame, out) %>%
+    unnest(cols = c(mean_n)) %>%
+    rename(mean_n = y, mean_min = ymin, mean_max = ymax)
+  
+  saveRDS(cum_mean_df2, file = file)
 }
-
-cum_mean_df2 <- do.call(rbind.data.frame, out) %>%
-  unnest(cols = c(mean_n)) %>%
-  rename(mean_n = y, mean_min = ymin, mean_max = ymax)
 ```
 
 ```{r}
