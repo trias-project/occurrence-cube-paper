@@ -347,7 +347,8 @@ final_occurrence_df <- iterate_occurrences(iteration_df, "total", "year")
 
 ```{r, fig.height=10}
 final_occurrence_df %>%
-  pivot_longer(cols = c(expected_n, counting), 
+  rename(`number of occurrences` = counting) %>%
+  pivot_longer(cols = c(expected_n, `number of occurrences`), 
                names_to = "measure", values_to = "n") %>%
   st_as_sf() %>%
   ggplot() +
@@ -416,7 +417,7 @@ pp_check(fit, type = "bars_grouped", ndraws = 100 , group = "year",
          facet_args = list(ncol = 1, scales = "free_y"))
 ```
 
-The estimated abundance over the complete grid is not significantly lower between the two years.
+The estimated abundance over the complete grid is not significantly different between the two years.
 
 ```{r}
 hyp <- hypothesis(x = fit,
@@ -440,9 +441,9 @@ fit %>%
 
 # Convergence
 
-Do we really need to simulate 1000 cubes.
+Do we really need to simulate 1000 cubes?
 Can we work with less?
-We look at the data of 2022.
+We look at the 2022 data.
 
 ## Grid cell statistics
 
