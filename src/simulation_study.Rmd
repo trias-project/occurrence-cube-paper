@@ -294,7 +294,7 @@ occupancy_df %>%
 
 2.  We select the resp. 7, 6 grid cells with the highest probability of occupancy
 
-```{r}
+```{r, fig.width=10}
 ids_2022 <- full_join(grid_df, occupancy_prob_df, by = join_by(id)) %>%
   arrange(desc(p)) %>%
   head(7) %>%
@@ -345,7 +345,7 @@ iteration_df <- bind_rows(
 final_occurrence_df <- iterate_occurrences(iteration_df, "total", "year")
 ```
 
-```{r}
+```{r, fig.height=10}
 final_occurrence_df %>%
   pivot_longer(cols = c(expected_n, counting), 
                names_to = "measure", values_to = "n") %>%
@@ -365,7 +365,7 @@ final_occurrence_df %>%
 
 4.  We now have both occupancy as well as abundance data to start modelling
 
-```{r}
+```{r, fig.height=10}
 final_occurrence_df %>%
   mutate(abundance = as.character(counting),
          occupancy = ifelse(counting == 0, "absent", "present")) %>%
@@ -381,6 +381,8 @@ final_occurrence_df %>%
 ```
 
 5.  Modelling exercise
+
+We can for example model the average number of occurrences over the entire grid per year assuming a zero-inflated Poisson distribution.
 
 ```{r}
 dat <- final_occurrence_df %>%
@@ -437,6 +439,11 @@ fit %>%
 
 
 # Convergence
+
+Do we really need to simulate 1000 cubes.
+Can we work with less?
+We look at the data of 2022.
+
 ## Grid cell statistics
 
 The mean number of occurrences per grid cell seems to become stable after 800 simulations.
