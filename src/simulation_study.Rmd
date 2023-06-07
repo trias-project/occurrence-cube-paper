@@ -502,7 +502,6 @@ cum_mean_df2 %>%
          y = "mean number of occurrences per\ngrid with confidence intervals")
 ```
 
-
 The difference between the mean number of occurrences and the expected number of occurrences can be seen as a measure of convergence error. 
 
 ```{r}
