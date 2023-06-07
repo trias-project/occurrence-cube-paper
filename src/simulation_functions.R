@@ -98,11 +98,11 @@ iterate_occurrences <- function(iter_df, total_var, grouping_var) {
   }
   out <- vector(mode = "list", length = nrow(distinct(iter_df[grouping_var])))
   # Loop over grouping variable
-  for (i in seq_along(pull(distinct(test[grouping_var])))) {
+  for (i in seq_along(pull(distinct(iter_df[grouping_var])))) {
     # Filter data
-    y <- pull(distinct(test[grouping_var]))[i]
+    y <- pull(distinct(iter_df[grouping_var]))[i]
     df <- iter_df %>%
-      filter(year == y,
+      filter(!!sym(grouping_var) == y,
              !is.na(expected_n)) %>%
       mutate(counting = floor(expected_n + 1e-6)) %>%
       mutate(iter = expected_n - counting)
