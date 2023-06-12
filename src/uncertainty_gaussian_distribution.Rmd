@@ -20,9 +20,58 @@ opts_chunk$set(echo = TRUE,
                message = FALSE)
 opts_knit$set(root.dir = here())
 
+conflicted::conflicts_prefer(dplyr::select())
+conflicted::conflicts_prefer(dplyr::filter())
+
 library(sf)
 library(tidyverse)
+library(ggExtra)
+library(mnormt)
+```
+
+# Data generation
+
+We create a point with 100 m uncertainty.
+
+```{r}
+point_df <- tibble(lat = 183900,
+                   long = 64000,
+                   coordinateUncertaintyInMeters = 100)
 ```
 
 
+# Background
+
+
+# Visualisation
+
+```{r}
+mu <- c(point_df$long, point_df$lat)
+var <- (point_df$coordinateUncertaintyInMeters / qnorm(0.975))^2
+varcovar <- matrix(c(var, -1, -1, var), nrow = 2)
+
+dat <- rmnorm(10000, mean = mu, varcov = varcovar) %>%
+  as_tibble() %>%
+  rename(long = V1, lat = V2) %>%
+  mutate(density = dmnorm(cbind(long, lat), mean = mu, varcov = varcovar))
+```
+
+```{r}
+scatter <- dat %>%
+  ggplot(aes(x = long, y = lat)) + 
+    geom_point(aes(colour = density)) +
+    geom_segment(data = point_df, 
+               aes(x = long, xend = long + coordinateUncertaintyInMeters, 
+                   y = lat, yend = lat),
+               linewidth = 1.5, colour = "green") +
+    geom_text(aes(y = 183910, x = 64050, label = "100 m"), colour = "green") +
+    geom_point(data = point_df, aes(x = long, y = lat), color = "firebrick") +
+    stat_ellipse(level = 0.95, linewidth = 1.5, color = "firebrick") +
+    coord_fixed() +
+    labs(x = "longitude", y = "latitude") +
+    theme(legend.position = "")
+    
+
+ggMarginal(scatter, type = "histogram")
+```
 
