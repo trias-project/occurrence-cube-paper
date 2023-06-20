@@ -54,8 +54,8 @@ This could be parametrised when creating the cube. The user decides which distri
    -  no modifiable parameters necessary
    -  each location within the uncertainty circle has an equal probability
    -  useful when there are multiple uncertainty generation processes involved or when the process(es) is (are) unknown 
--  `normal(mu = 0, sigma = coordinateUncertaintyInMeters / qnorm(p))`
-   -  `p` can be chosen by the user, default value is 0.95
+-  `normal(mu = 0, var = -coordinateUncertaintyInMeters² / 2ln(1-p))`
+   -  `p` can be chosen by the user, default value is 0.95 (95 % of points fall within circle with radius equal to `coordinateUncertaintyInMeters`)
    -  locations near the center of the uncertainty circle have higher probability then near the edge
    -  there might be multiple reasons for which a normal distribution is more desirable than a uniform distribution that could be argued by the user
       -  e.g. all data come from one project where uncertainty is due to the GPS measuring device
