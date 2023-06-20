@@ -28,6 +28,8 @@ library(sf)
 library(tidyverse)
 library(ggExtra)
 library(mnormt)
+
+options("scipen" = 10)
 ```
 
 # Data generation
@@ -53,7 +55,7 @@ This could be parametrised when creating the cube. The user decides which distri
    -  each location within the uncertainty circle has an equal probability
    -  useful when there are multiple uncertainty generation processes involved or when the process(es) is (are) unknown 
 -  `normal(mu = 0, sigma = coordinateUncertaintyInMeters / qnorm(p))`
-   -  `p` can be chosen by the user, default value is 0.975
+   -  `p` can be chosen by the user, default value is 0.95
    -  locations near the center of the uncertainty circle have higher probability then near the edge
    -  there might be multiple reasons for which a normal distribution is more desirable than a uniform distribution that could be argued by the user
       -  e.g. all data come from one project where uncertainty is due to the GPS measuring device
@@ -61,7 +63,7 @@ This could be parametrised when creating the cube. The user decides which distri
 # Visualisation
 ## Uniform distribution
 
-In the uniform case, each random point within the circle of uncertainty has the same probability although the histograms do not seem to look uniform. This is because of the circular shape.
+We visualise a sample of 5000 points. In the uniform case, each random point within the circle of uncertainty has the same probability although the histograms do not seem to look uniform. This is because of the circular shape.
 
 ```{r}
 set.seed(123)
@@ -96,21 +98,80 @@ ggMarginal(scatter_unif, type = "histogram")
 
 ## Normal distribution
 
-In the normal case, random points closer to the center have a higher probability. 95 % of the random points fall within the bounds of the red circle (`p = 0.975`). The radius of the circle would be equal to the coordinate uncertainty (here 100 m) if we would sample an infinite number of points.
+In the normal case, random points closer to the center have a higher probability. 95 % of the random points fall within the bounds of the red circle (`p = 0.95`). The radius of the circle would be equal to the coordinate uncertainty (here `r point_df$coordinateUncertaintyInMeters` m) if we would sample an infinite number of points.
+
+$$
+\begin{align}
+P(X^2 + Y^2 > 100^2) &= P\left(\left(\frac{X}{\sigma}\right)^2 + \left(\frac{Y}{\sigma}\right)^2 > \frac{100^2}{\sigma^2}\right)\\
+  &= P\left(Z_1^2 + Z_2^2 > \frac{100^2}{\sigma^2}\right)\\
+  &= \exp(-\frac{100^2}{2\sigma^2})
+\end{align}
+$$
+
+We set this to $1 - p = 0.05$ such that we can derive the variance $\sigma^2$ (see [Bivariate normal distribution of points](https://math.stackexchange.com/questions/1422374/bivariate-normal-distribution-of-points))
+
+$$
+\begin{align}
+&\exp(-\frac{100^2}{2\sigma^2}) = 0.05\\
+&\Rightarrow \frac{100^2}{2\sigma^2} = - \ln(0.05)\\
+&\Rightarrow \sigma^2 = \frac{-100^2}{2\ln(0.05)}
+\end{align}
+$$
+
+```{r}
+npoints <- 100000
+```
+
+We test the proportion of random points ($n =$ `r npoints`) outside `r point_df$coordinateUncertaintyInMeters` meters based on this variance.
+
+```{r}
+mu <- c(point_df$long, point_df$lat)
+p <- 0.95
+var <- (-point_df$coordinateUncertaintyInMeters^2) / (2 * log(1 - p))
+varcovar <- matrix(c(var, -1, -1, var), nrow = 2)
+```
+
+```{r}
+nsim <- 100
+npoints <- 100000
+out_vec <- vector(mode = "list", length = nsim)
+for (i in seq_len(nsim)) {
+  test_norm <- rmnorm(npoints, mean = mu, varcov = varcovar) %>%
+    as_tibble() %>%
+    rename(long = V1, lat = V2) %>%
+    mutate(density = dmnorm(cbind(long, lat), mean = mu, varcov = varcovar)) %>%
+    mutate(dist = sqrt((point_df$long - long)^2 + (point_df$lat - lat)^2))
+
+ out_vec[[i]] <- sum(test_norm$dist > point_df$coordinateUncertaintyInMeters) / 
+   npoints
+}
+sim_df <- do.call(rbind.data.frame, out_vec) %>%
+  `colnames<-`("p_val") %>%
+  rownames_to_column("n_sim") %>%
+  mutate(n_sim = as.numeric(n_sim))
+
+sim_df %>%
+  ggplot(aes(x = n_sim, y = p_val, group = 1)) +
+    geom_line() +
+    geom_point() +
+    scale_x_continuous(breaks = seq(0, 100, 10)) +
+    scale_y_continuous(limits = c(0.04, 0.06)) +
+    geom_hline(yintercept = 0.05, colour = "firebrick") +
+    labs(x = paste0("number of simulations (N = ", nsim, ")"),
+         y = paste0("proportion of random points (n = ", npoints, ")\noutside ",
+                    "circle with radius ", 
+                    point_df$coordinateUncertaintyInMeters, " m"))
+```
+
+Indeed this looks correct. We visualise a sample of 5000 points.
 
 ```{r}
 set.seed(123)
-mu <- c(point_df$long, point_df$lat)
-var <- (point_df$coordinateUncertaintyInMeters / qnorm(p = 0.975))^2
-varcovar <- matrix(c(var, -1, -1, var), nrow = 2)
-
 dat_norm <- rmnorm(5000, mean = mu, varcov = varcovar) %>%
   as_tibble() %>%
   rename(long = V1, lat = V2) %>%
   mutate(density = dmnorm(cbind(long, lat), mean = mu, varcov = varcovar))
-```
 
-```{r}
 scatter_norm <- dat_norm %>%
   ggplot(aes(x = long, y = lat)) + 
     geom_point(aes(colour = density)) +
@@ -121,7 +182,7 @@ scatter_norm <- dat_norm %>%
     geom_text(aes(y = 183915, x = 64050, label = "100 m"), colour = "black",
               size = 5) +
     geom_point(data = point_df, aes(x = long, y = lat), color = "firebrick") +
-    stat_ellipse(level = 0.95, linewidth = 1.5, color = "firebrick") +
+    stat_ellipse(level = 0.975, linewidth = 1.5, color = "firebrick") +
     coord_fixed() +
     labs(x = "longitude", y = "latitude") +
     theme(legend.position = "")
@@ -130,7 +191,7 @@ scatter_norm <- dat_norm %>%
 ggMarginal(scatter_norm, type = "histogram")
 ```
 
-Setting the parameter `p` to 0.975 would implicate that we only sample random points within the boundaries of the uncertainty circle according to a random distribution. The points outside these bounds in the graph above are just shown for explanatory purposes.
+Setting the parameter `p` to 0.95 would implicate that we only sample random points within the boundaries of the uncertainty circle according to a random distribution. The points outside these bounds in the graph above are just shown for explanatory purposes.
 
 ```{r}
 dat_norm %>%
