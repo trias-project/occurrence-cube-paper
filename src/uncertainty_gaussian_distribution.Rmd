@@ -1,5 +1,5 @@
 ---
-title: "Simulations of occurrence cubes"
+title: "Different ways of of assigning occurrences to grid cells"
 author: "Ward Langeraert"
 date: "`r Sys.Date()`"
 output:
@@ -50,11 +50,15 @@ When coordinate uncertainty comes from different sources or the uncertainty gene
 
 This could be parametrised when creating the cube. The user decides which distribution (and parameters to use) with recommendations from our side.
 
--  `uniform(0, coordinateUncertaintyInMeters)`
+1.  No distribution
+   -  cube based on point coordinates from GBIF without random assignment
+   -  measure of uncertainty based on `coordinateUncertaintyInMeters` is given with each grid cell, e.g. minimal coordinate uncertainty as done with the TrIAS cube
+   -  might be useful if the occurrence uncertainty wants to be included in the downstream analysis, e.g. when developing indicators, rather then using the uncertainty for creating the cube itself
+2.  `uniform(0, coordinateUncertaintyInMeters)`
    -  no modifiable parameters necessary
    -  each location within the uncertainty circle has an equal probability
    -  useful when there are multiple uncertainty generation processes involved or when the process(es) is (are) unknown 
--  `normal(mu = 0, var = -coordinateUncertaintyInMeters² / 2ln(1-p))`
+3.  `normal(mu = 0, var = -coordinateUncertaintyInMeters² / 2ln(1-p))`
    -  `p` can be chosen by the user, default value is 0.95 (95 % of points fall within circle with radius equal to `coordinateUncertaintyInMeters`)
    -  locations near the center of the uncertainty circle have higher probability then near the edge
    -  there might be multiple reasons for which a normal distribution is more desirable than a uniform distribution that could be argued by the user
