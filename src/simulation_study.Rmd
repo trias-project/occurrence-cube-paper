@@ -1,0 +1,653 @@
+---
+title: "Simulations of occurrence cubes"
+author: "Ward Langeraert"
+date: "`r Sys.Date()`"
+output:
+  bookdown::html_document2:
+    code_folding: hide
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(here)
+library(knitr)
+opts_chunk$set(echo = TRUE,
+               warning = FALSE,
+               message = FALSE)
+opts_knit$set(root.dir = here::here())
+
+library(sf)
+library(tidyverse)
+library(brms)
+library(emmeans)
+library(tidybayes)
+
+source(here("src", "simulation_functions.R"))
+```
+
+# Simulate data
+
+First we simulate points.
+
+```{r}
+test_points <- sim_points(10, add_points = tibble(lat = 183900, long = 64000,
+                          coordinateUncertaintyInMeters = 50))
+
+test_circles <- test_points %>%
+  st_buffer(test_points$coordinateUncertaintyInMeters)
+```
+
+We create a custom grid around the points.
+
+```{r}
+grid_df <- create_grid(500, test_circles)
+```
+
+Visualisation:
+
+```{r}
+ggplot() +
+  geom_sf(data = grid_df) +
+  geom_sf(data = test_circles, fill = alpha("white", 0))
+```
+
+
+# Simulate cubes
+
+```{r}
+sims <- 1000
+```
+
+We simulate `r sims` cubes.
+
+```{r}
+final_df <- sim_cubes(sims, test_points, grid_df)
+```
+
+
+## Calculate statistics
+
+```{r}
+# Summary statistics
+summary_df <- final_df %>%
+  group_by(id) %>%
+  summarise(mean_n = mean_cl_boot(n, conf.int = .95),
+            sd_n = sd(n),
+            median_n = median(n),
+            iqr_n = IQR(n), .groups = "drop") %>%
+  unnest(cols = c(mean_n)) %>%
+  rename(mean_n = y, mean_min = ymin, mean_max = ymax)
+
+# Calculate effective number of occurrences
+int_grid_circle <- test_circles %>%
+  mutate(circle_area = st_area(test_circles),
+         point_id = row_number()) %>%
+  st_intersection(grid_df)
+
+props <- int_grid_circle %>%
+  mutate(area = st_area(int_grid_circle),
+         prop = area / circle_area)
+
+summary_grid_props <- props %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  summarise(expected_n = sum(prop)) %>%
+  full_join(grid_df, by = join_by(id)) %>%
+  st_as_sf() %>%
+  mutate(expected_n = ifelse(is.na(expected_n), 0, expected_n))
+
+# Calculate probability of occupancy
+occupancy_prob_df <- final_df %>% 
+  count(id, n, name = "total") %>%
+  group_by(id) %>% 
+  mutate(occupancy = ifelse(n == 0, 0, 1)) %>%
+  group_by(id, occupancy) %>%
+  summarise(n = sum(total)) %>%
+  group_by(id) %>%
+  mutate(sum = sum(n)) %>%
+  ungroup() %>%
+  mutate(p = n / sum)
+
+design <-  occupancy_prob_df %>%
+  expand(id, occupancy)
+
+occupancy_prob_df <- occupancy_prob_df %>%
+  full_join(design, by = join_by(id, occupancy)) %>%
+  mutate(across(where(is.numeric), ~ coalesce(.x, 0))) %>%
+  group_by(id) %>%
+  mutate(sum = sum(n)) %>%
+  ungroup() %>%
+  filter(occupancy == 1)
+```
+
+## Visualise simulations
+
+```{r}
+example_cells <- 14:25
+```
+
+Example distributions for grid cells `r example_cells`
+
+```{r}
+final_df %>% 
+  filter(id %in% example_cells) %>%
+  mutate(occupancy = ifelse(n == 0, "0", ">1")) %>%
+  ggplot(aes(x = n)) + 
+    geom_bar(aes(fill = occupancy)) +
+    geom_text(data = summary_df %>% filter(id %in% example_cells), 
+              aes(x = 3, y = 750, label = paste0(
+                "ul_ci: ", round(mean_max, 3), "\n",
+                "mean: ", mean_n, "\n",
+                "ll_ci: ", round(mean_min, 3)))) +
+    facet_wrap(~id) +
+    labs(y = "frequency", x = "number of observations per grid cell")
+```
+
+
+# Visualise statistics
+
+In total we have `r nrow(test_points)` occurrences.
+
+```{r, fig.height=10}
+summary_df %>%
+  select(id, mean_n, median_n) %>%
+  full_join(summary_grid_props, by = join_by(id)) %>%
+  mutate(expected_n_rounded = round(expected_n)) %>%
+  pivot_longer(cols = c(mean_n, median_n, expected_n, expected_n_rounded), 
+               names_to = "measure", values_to = "n") %>%
+  st_as_sf() %>%
+  ggplot() +
+    geom_sf(aes(fill = n)) +
+    geom_sf_text(aes(label = round(n, 3))) +
+    geom_sf(data = test_circles, fill = alpha("white", 0), 
+            colour = "firebrick") +
+    scale_fill_gradient2() +
+    labs(fill = "number of occurrences", x = "", y = "") +
+    facet_wrap(~measure, ncol = 2) +
+    theme(legend.position = "bottom")
+```
+
+```{r}
+full_join(grid_df, occupancy_prob_df, by = join_by(id)) %>%
+  mutate(cat = case_when(
+    p <= 0.25 ~ "0-0.25",
+    p > 0.25 & p <= 0.5 ~ "0.25-0.5",
+    p > 0.5 & p <= 0.75 ~ "0.5-0.75",
+    TRUE ~ "0.75-1.0"
+  )) %>%
+  ggplot() +
+  geom_sf(aes(fill = cat)) +
+  geom_sf_text(aes(label = round(p, 3))) +
+  geom_sf(data = test_circles, fill = alpha("white", 0), 
+          colour = "firebrick") +
+  labs(fill = "P(n >=1)", title = "Probability of occupancy",
+       x = "", y = "")
+```
+
+We also visualise the distribution of occupied grid cells.
+
+```{r}
+occupancy_df <- final_df %>%
+  mutate(occupancy = ifelse(n == 0, 0, 1)) %>%
+  group_by(sim) %>%
+  summarise(n = sum(occupancy)) %>%
+  mutate(year = factor(2022))
+```
+
+```{r}
+occupancy_df %>%
+  ggplot(aes(x = n)) +
+    geom_bar() +
+    labs(x = "number of occupied grid cells",
+         y = "frequency")
+```
+
+We create a second set of occurrence cubes to represent a different year.
+We can take the average of the distribution with an 95 % confidence interval by bootstrapping.
+This is just an example to show how we can deal with the data.
+
+```{r}
+test_points2 <- sim_points(9, seed = 1235)
+
+test_circles2 <- test_points2 %>%
+  st_buffer(test_points$coordinateUncertaintyInMeters)
+
+final_df2 <- sim_cubes(sims, test_points2, grid_df)
+
+# Calculate effective number of occurrences
+int_grid_circle2 <- test_circles2 %>%
+  mutate(circle_area = st_area(test_circles2),
+         point_id = row_number()) %>%
+  st_intersection(grid_df)
+
+props2 <- int_grid_circle2 %>%
+  mutate(area = st_area(int_grid_circle2),
+         prop = area / circle_area)
+
+summary_grid_props2 <- props2 %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  summarise(expected_n = sum(prop)) %>%
+  full_join(grid_df, by = join_by(id)) %>%
+  st_as_sf() %>%
+  mutate(expected_n = ifelse(is.na(expected_n), 0, expected_n))
+
+# Calculate probability of occupancy
+occupancy_prob_df2 <- final_df2 %>% 
+  count(id, n, name = "total") %>%
+  group_by(id) %>% 
+  mutate(occupancy = ifelse(n == 0, 0, 1)) %>%
+  group_by(id, occupancy) %>%
+  summarise(n = sum(total)) %>%
+  group_by(id) %>%
+  mutate(sum = sum(n)) %>%
+  ungroup() %>%
+  mutate(p = n / sum)
+
+design <-  occupancy_prob_df2 %>%
+  expand(id, occupancy)
+
+occupancy_prob_df2 <- occupancy_prob_df2 %>%
+  full_join(design, by = join_by(id, occupancy)) %>%
+  mutate(across(where(is.numeric), ~ coalesce(.x, 0))) %>%
+  group_by(id) %>%
+  mutate(sum = sum(n)) %>%
+  ungroup() %>%
+  filter(occupancy == 1)
+
+occupancy_df2 <- final_df2 %>%
+  mutate(occupancy = ifelse(n == 0, 0, 1)) %>%
+  group_by(sim) %>%
+  summarise(n = sum(occupancy)) %>%
+  mutate(year = factor(2023))
+```
+
+```{r}
+occupancy_df %>%
+  bind_rows(occupancy_df2) %>%
+  ggplot(aes(x = year, y = n, colour = year)) +
+    stat_summary(fun.data = "mean_cl_boot") +
+    labs(x = "", 
+         y = "number of occupied grid cells")
+```
+
+# Using the cubes
+
+How can we decide on a threshold for species occupancy and abundance to use for modelling?
+
+1.  Based on the distribution of occupied grid cells we see that 7 occupied grid cells is the most probable for 2022 and 6 for 2023
+
+```{r}
+occupancy_df %>%
+  bind_rows(occupancy_df2) %>%
+  ggplot(aes(x = n)) +
+    geom_bar() +
+    labs(x = "number of occupied grid cells",
+         y = "frequency") +
+    facet_wrap(~year)
+```
+
+
+2.  We select the resp. 7, 6 grid cells with the highest probability of occupancy
+
+```{r, fig.width=10}
+ids_2022 <- full_join(grid_df, occupancy_prob_df, by = join_by(id)) %>%
+  arrange(desc(p)) %>%
+  head(7) %>%
+  pull(id)
+
+ids_2023 <- full_join(grid_df, occupancy_prob_df2, by = join_by(id)) %>%
+  arrange(desc(p)) %>%
+  head(6) %>%
+  pull(id)
+
+full_join(grid_df, occupancy_prob_df, by = join_by(id)) %>%
+  mutate(p = ifelse(id %in% ids_2022, p, NA),
+         year = 2022) %>%
+  bind_rows(full_join(grid_df, occupancy_prob_df2, by = join_by(id)) %>%
+                mutate(p = ifelse(id %in% ids_2023, p, NA),
+                       year = 2023)) %>%
+  ggplot() +
+  geom_sf(aes(fill = p)) +
+  geom_sf_text(aes(label = round(p, 3))) +
+  geom_sf(data = bind_rows(test_circles %>% mutate(year = 2022),
+                           test_circles2 %>% mutate(year = 2023)), 
+          fill = alpha("white", 0), 
+          colour = "firebrick") +
+  labs(fill = "P(n >=1)", title = "Probability of occupancy",
+       x = "", y = "") +
+  facet_wrap(~year)
+```
+
+3.  How many occurrences do we have in these cells? We create an iterative algorithm that meets the following rules:
+    -   Only the selected grid cells may contain occurrences
+    -   The total number of occurrences to designate is limited by the total number of occurrences per dataset
+        -   11 for 2022
+        -   9 for 2023
+
+```{r}
+# We need a data frame with a column containing the total number of occurrences
+# per group (column with grouping variable, here 'year')
+iteration_df <- bind_rows(
+  summary_grid_props %>% 
+    mutate(year = 2022,
+           total = 11,
+           expected_n = ifelse(id %in% ids_2022, expected_n, NA)), 
+  summary_grid_props2  %>% 
+    mutate(year = 2023,
+           total = 9,
+           expected_n = ifelse(id %in% ids_2023, expected_n, NA)))
+
+final_occurrence_df <- iterate_occurrences(iteration_df, "total", "year")
+```
+
+```{r, fig.height=10}
+final_occurrence_df %>%
+  rename(`number of occurrences` = counting) %>%
+  pivot_longer(cols = c(expected_n, `number of occurrences`), 
+               names_to = "measure", values_to = "n") %>%
+  st_as_sf() %>%
+  ggplot() +
+    geom_sf(aes(fill = n)) +
+    geom_sf_text(aes(label = round(n, 3))) +
+  geom_sf(data = bind_rows(test_circles %>% mutate(year = 2022),
+                           test_circles2 %>% mutate(year = 2023)), 
+          fill = alpha("white", 0), 
+          colour = "firebrick") +
+    scale_fill_gradient2() +
+    labs(fill = "number of occurrences", x = "", y = "") +
+    facet_grid(year~measure) +
+    theme(legend.position = "bottom")
+```
+
+4.  We now have both occupancy as well as abundance data to start modelling
+
+```{r, fig.height=10}
+final_occurrence_df %>%
+  mutate(abundance = as.character(counting),
+         occupancy = ifelse(counting == 0, "absent", "present")) %>%
+  pivot_longer(cols = c(abundance, occupancy), 
+               names_to = "measure", values_to = "n") %>%
+  st_as_sf() %>%
+  ggplot() +
+    geom_sf(aes(fill = n)) +
+    geom_sf_text(aes(label = n), size = 3) +
+    labs(fill = "number of occurrences", x = "", y = "") +
+    facet_grid(year~measure) +
+    theme(legend.position = "")
+```
+
+5.  Modelling exercise
+
+We can for example model the average number of occurrences over the entire grid per year assuming a zero-inflated Poisson distribution.
+
+```{r}
+dat <- final_occurrence_df %>%
+  st_drop_geometry() %>%
+  mutate(abundance = counting,
+         occupancy = ifelse(counting == 0, 0, 1),
+         year = as.factor(year))
+
+# MCMC parameters
+nchains <- 3           # number of chains
+niter <- 4000          # number of iterations (incl. burn-in)
+burnin <- niter / 2    # number of initial samples to discard (burn-in)
+nparallel <- nchains   # number of cores used for parallel computing
+
+fit <- brm(bf(abundance ~ year), data = dat, 
+           family = zero_inflated_poisson(), 
+           chains = nchains, warmup = burnin, iter = niter, 
+           cores = nparallel)
+```
+
+Model convergence is good:
+
+```{r}
+plot(fit)
+```
+
+Model fit is good:
+
+```{r}
+pp_check(fit, type = "bars_grouped", ndraws = 100 , group = "year",
+         facet_args = list(ncol = 1, scales = "free_y"))
+```
+
+The estimated abundance over the complete grid is not significantly different between the two years.
+
+```{r}
+hyp <- hypothesis(x = fit,
+  "year2023 = 0",
+  class = "b", alpha = 0.05)
+plot(hyp)
+hyp
+```
+
+```{r}
+fit %>%
+  emmeans(~ year) %>%
+  gather_emmeans_draws() %>%
+  mutate(abundance = exp(.value)) %>%
+  ggplot(aes(y = abundance, x = year, fill = year)) +
+    stat_eye() +
+    labs(x = "", y = "estimated abundance over complete grid") +
+    theme(legend.position = "")
+```
+
+
+# Convergence
+
+Do we really need to simulate 1000 cubes?
+Can we work with less?
+We look at the 2022 data.
+
+## Grid cell statistics
+
+The mean number of occurrences per grid cell seems to become stable after 800 simulations.
+The grey lines show the expected number of occurrences per grid cell.
+
+```{r}
+cum_mean_df <- final_df %>%
+  group_by(id) %>%
+  arrange(id, sim) %>%
+  mutate(mean_n = cummean(n))
+
+cum_mean_df %>%
+  ggplot(aes(x = sim, y = mean_n, colour = as.factor(id), group = id)) +
+    geom_hline(data = st_drop_geometry(summary_grid_props) %>%
+                 mutate(sim = 1000),
+               aes(yintercept = expected_n), colour = alpha("grey", 0.5)) +
+    geom_line() +
+    scale_x_continuous(breaks = seq(0, 1000, 100)) +
+    theme(legend.position = "") +
+    labs(x = "number of simulations", 
+         y = "mean number of\noccurrences per grid cell")
+```
+
+The 95% confidence intervals around the mean (based on 1000 bootstrap samples) is also especially variable in the first 200 simulations.
+
+```{r}
+dir.create(here("src", "simulation_study_cache"), showWarnings = FALSE)
+file <- here("src", "simulation_study_cache", "bootstrapped_mean.Rds")
+if (file.exists(file)) {
+  cum_mean_df2 <- readRDS(file)
+} else {
+  out <- vector(mode = "list", length = length(unique(final_df$sim)))
+  
+  for (i in seq_len(length(unique(final_df$sim)))) {
+    out[[i]] <- final_df %>%
+      filter(sim <= i) %>%
+      arrange(id) %>%
+      group_by(id) %>%
+      summarise(mean_n = mean_cl_boot(n, conf.int = .95)) %>% 
+      mutate(sim = i)
+  }
+  
+  cum_mean_df2 <- do.call(rbind.data.frame, out) %>%
+    unnest(cols = c(mean_n)) %>%
+    rename(mean_n = y, mean_min = ymin, mean_max = ymax)
+  
+  saveRDS(cum_mean_df2, file = file)
+}
+```
+
+```{r}
+cum_mean_df2 %>%
+  group_by(id) %>%
+  mutate(sum = sum(mean_n)) %>%
+  ungroup() %>%
+  filter(sum != 0) %>%
+  ggplot(aes(x = sim, y = mean_n, colour = as.factor(id), group = id)) +
+    geom_errorbar(aes(ymin = mean_min, ymax = mean_max)) +
+    geom_point(size = 0.05, colour = alpha("lightgrey", 0.2)) +
+    scale_x_continuous(breaks = seq(0, 1000, 100)) +
+    theme(legend.position = "") +
+    labs(x = "number of simulations", 
+         y = "mean number of occurrences per\ngrid with confidence intervals")
+```
+
+The difference between the mean number of occurrences and the expected number of occurrences can be seen as a measure of convergence error. 
+
+```{r}
+cum_mean_df %>%
+  full_join(st_drop_geometry(summary_grid_props), by = join_by(id)) %>%
+  mutate(error = mean_n - expected_n) %>%
+  ggplot(aes(x = sim, y = error, colour = as.factor(id), group = id)) +
+      geom_line() +
+      scale_x_continuous(breaks = seq(0, 1000, 100)) +
+      theme(legend.position = "") +
+      labs(x = "number of simulations", 
+           y = "convergence error mean per grid cell")
+```
+
+The sum of all errors seems to converge quite late.
+
+```{r}
+cum_mean_df %>%
+  full_join(st_drop_geometry(summary_grid_props), by = join_by(id)) %>%
+  mutate(error = mean_n - expected_n,
+         abs_error = abs(error)) %>%
+  group_by(sim) %>%
+  mutate(sum_abs_error = sum(abs_error)) %>%
+  ungroup() %>%
+  ggplot(aes(x = sim, y = sum_abs_error)) +
+      geom_line(colour = "black", linewidth = 1) +
+      scale_x_continuous(breaks = seq(0, 1000, 100)) +
+      theme(legend.position = "") +
+      labs(x = "number of simulations", 
+           y = "total error on mean\nnumber of occurrences per grid cell")
+```
+
+The median number of occurrences per grid cell seems to become stable after 600 simulations.
+
+```{r}
+out <- vector(mode = "list", length = length(unique(final_df$sim)))
+
+for (i in seq_len(length(unique(final_df$sim)))) {
+  out[[i]] <- final_df %>%
+    filter(sim <= i) %>%
+    arrange(id) %>%
+    group_by(id) %>%
+    summarise(median_n = median(n)) %>% 
+    mutate(sim = i)
+}
+
+cum_median_df <- do.call(rbind.data.frame, out)
+```
+
+```{r}
+cum_median_df %>%
+  ggplot(aes(x = sim, y = median_n, colour = as.factor(id), group = id)) +
+    geom_line() +
+    scale_x_continuous(breaks = seq(0, 1000, 100)) +
+    theme(legend.position = "") +
+    labs(x = "number of simulations", 
+         y = "median number of\noccurrences per grid cell")
+```
+
+Occupancy probability seems to become stable after 800 simulations.
+
+```{r}
+out <- vector(mode = "list", length = length(unique(final_df$sim)))
+
+for (i in seq_len(length(unique(final_df$sim)))) {
+  occupancy_temp <- final_df %>%
+    filter(sim <= i) %>%
+    arrange(id) %>%
+    count(id, n, name = "total") %>%
+    group_by(id) %>% 
+    mutate(occupancy = ifelse(n == 0, 0, 1)) %>%
+    group_by(id, occupancy) %>%
+    summarise(n = sum(total), .groups = "drop") %>%
+    group_by(id) %>%
+    mutate(sum = sum(n)) %>%
+    ungroup() %>%
+    mutate(p = n / sum)
+
+  design_temp <-  occupancy_temp %>%
+    expand(id, occupancy)
+  
+  out[[i]] <- occupancy_temp %>%
+    full_join(design_temp, by = join_by(id, occupancy)) %>%
+    mutate(across(where(is.numeric), ~ coalesce(.x, 0))) %>%
+    group_by(id) %>%
+    mutate(sum = sum(n)) %>%
+    ungroup() %>%
+    filter(occupancy == 1) %>% 
+    mutate(sim = i)
+}
+
+cum_occupancy_df <- do.call(rbind.data.frame, out)
+```
+
+```{r}
+cum_occupancy_df %>%
+  ggplot(aes(x = sim, y = p, colour = as.factor(id), group = id)) +
+    geom_line() +
+    scale_x_continuous(breaks = seq(0, 1000, 100)) +
+    theme(legend.position = "") +
+    labs(x = "number of simulations", 
+         y = "probability of occupancy per grid cell")
+```
+
+## Grid statistics
+
+How variable is the total number of occupied grid cells?
+A grid cell $j$ ($j = 1, ..., j$) is occupied when the probability of occupancy $p$ is above a certain threshold $t$, such that the total number of occupied cells $N$
+
+$$
+N = \sum_{j=1}^J I(p_j \geq t)
+$$
+
+We compare different thresholds.
+
+```{r}
+cum_occupancy_df %>%
+  mutate(occupancy_10 = ifelse(p >= 0.1, 1, 0),
+         occupancy_20 = ifelse(p >= 0.2, 1, 0),
+         occupancy_30 = ifelse(p >= 0.3, 1, 0),
+         occupancy_40 = ifelse(p >= 0.4, 1, 0),
+         occupancy_50 = ifelse(p >= 0.5, 1, 0),
+         occupancy_60 = ifelse(p >= 0.6, 1, 0),
+         occupancy_70 = ifelse(p >= 0.7, 1, 0),
+         occupancy_80 = ifelse(p >= 0.8, 1, 0),
+         occupancy_90 = ifelse(p >= 0.9, 1, 0)) %>% 
+  group_by(sim) %>%
+  summarise(across(starts_with("occupancy_"), sum)) %>%
+  pivot_longer(cols = starts_with("occupancy_"), 
+               names_to = "threshold", values_to = "n") %>%
+  separate(col = threshold, into = c("name", "threshold")) %>%
+  mutate(threshold = factor(as.numeric(threshold) / 100, ordered = TRUE)) %>%
+  select(-name) %>%
+  ggplot(aes(x = sim, y = n, colour = threshold, group = threshold)) +
+    geom_line() +
+    scale_x_continuous(breaks = seq(0, 1000, 100)) +
+    scale_y_continuous(breaks = seq(0, 20, 2), limits = c(0, NA)) +
+    labs(x = "number of simulations", 
+         y = "number of occupied grid cells",
+         colour = "threshold")
+```
