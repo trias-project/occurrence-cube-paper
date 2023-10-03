@@ -1,0 +1,441 @@
+---
+title: "Simulations of occurrence cubes"
+author: 
+  - "Damiano Oldoni"
+  - "Ward Langeraert"
+date: "`r Sys.Date()`"
+output:
+  bookdown::html_document2:
+    code_folding: hide
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(here)
+library(knitr)
+opts_chunk$set(echo = TRUE,
+               warning = FALSE,
+               message = FALSE)
+opts_knit$set(root.dir = here::here())
+
+library(sf)
+library(tidyverse)
+library(brms)
+library(emmeans)
+library(tidybayes)
+library(scales)
+library(leaflet)
+
+source(here::here("src", "simulations", "simulation_functions.R"))
+source(here::here("src", "real_data", "real_data_functions.R"))
+```
+
+# Read occurrence cubes, occurrences and EAA grid
+
+## Read occurrence cubes
+
+We have already generated multiple cubes on real data (see `./src/make_cubes_reynoutria.R`).
+
+```{r get_filenames_cube}
+filenames <- dir(here::here("data", "processed"))
+filenames <- filenames[stringr::str_starts(filenames, pattern = "cube_")]
+filenames <- filenames[stringr::str_detect(filenames, "\\d")]
+n_cubes <- length(filenames)
+```
+
+In particular, we have `r n_cubes` cubes to work with.
+
+We read them:
+
+```{r read_cubes}
+cubes <- purrr::map_dfr(
+  filenames,
+  function(x) {
+    sim_n <- as.integer(stringr::str_extract(x, "\\d+"))
+    readr::read_csv(here::here("data", "processed", x),
+                    show_col_types = FALSE) %>%
+      dplyr::mutate(sim = sim_n)
+  }
+)
+```
+
+## Read occurrences
+
+Read filtered occurrences:
+
+```{r read_filtered_occs}
+occ_reynoutria <- readr::read_tsv(
+  here::here("data",
+             "interim",
+             "reynoutria_filtered.tsv"),
+  na = "",
+  guess_max = 50000) %>%
+  mutate(x = decimalLongitude,
+         y = decimalLatitude) %>%
+  sf::st_as_sf(coords = c("x", "y"), crs = 4326)
+```
+
+Transform to EPSG3035 and create circles based on `coordinateUncertaintyInMeters` as radius (it can take long):
+
+```{r create_circles}
+occ_reynoutria_circles <- 
+  occ_reynoutria %>%
+  sf::st_transform(crs = 3035) %>%
+  sf::st_buffer(dist = occ_reynoutria$coordinateUncertaintyInMeters)
+```
+
+Make a copy of it with CRS 4326 for leaflet visualization purposes:
+
+```{r transform_to_4326}
+occ_reynoutria_circles_4326 <- 
+  occ_reynoutria_circles %>%
+  sf::st_transform(4326)
+```
+
+
+## Read EAA grid
+
+Read EAA grid and transform it to 4326:
+
+```{r}
+#read EEA grid of Belgium
+be_grid <- st_read("../indicators/data/external/utm1_bel")
+be_grid_4326 <- sf::st_transform(be_grid, crs = 4326)
+```
+
+# Recommendations
+
+Making maps from an occurrence cube is quite wrong as each occurrence cube is different from each other due to the random assignment. At least, add a map of the minimal coordinate uncertainty:
+
+```{r example_plot_cube}
+example_for_map <- 
+  cubes %>%
+  dplyr::filter(sim ==1, species == "Reynoutria japonica", 
+                year == 2013) %>%
+  left_join(be_grid_4326, by = c("eea_cell_code" = "CELLCODE")) %>%
+  sf::st_as_sf()
+
+pal <- colorNumeric("Reds", domain = 1:max(example_for_map$n))
+
+leaflet(example_for_map) %>%
+  addTiles() %>%
+  setView(lng = 3.12536, lat = 50.941963, zoom = 10) %>%
+  addPolygons(fillColor = ~pal(n), 
+              color = "green", 
+              weight = 3, 
+              opacity = 1,
+              fillOpacity = 0.9) %>%
+  addLegend(pal = pal, 
+            values = ~n, 
+            opacity = 0.7, 
+            title = "Reynoutria japonica, 2013",
+            position = "bottomright")
+```
+
+Note that uncertainty in Westhoek (region around Ieper) and around Bruges is very high:
+
+```{r example_plot_uncertainty}
+pal_uncertainty <- colorNumeric("Greys", domain = 1:max(example_for_map$min_coord_uncertainty))
+
+leaflet(example_for_map) %>%
+  addTiles() %>%
+  setView(lng = 3.12536, lat = 50.941963, zoom = 10) %>%
+  addPolygons(fillColor = ~pal_uncertainty(min_coord_uncertainty), 
+              color = "green", 
+              weight = 3, 
+              opacity = 1,
+              fillOpacity = 0.9) %>%
+  addLegend(
+    pal = pal_uncertainty, 
+    values = ~min_coord_uncertainty, 
+    opacity = 0.7, 
+    title = "Min coord uncertainty, R. japonica, 2013",
+    position = "bottomright"
+)
+```
+
+
+# Select some year/species combinations as use cases
+
+With real data we have a very wide spectrum of possible situations ranging from very scattered occurrences up to densed occurrences. Also, we can have occurrences with a low or high coordinate uncertainty.
+
+From the cubes we can have an idea about these situations by plotting the mean `min_coord_uncertainty` vs the mean of the maximum occs per grid cells. Number of occurrences as color. Each point is a species/year combination. 
+
+```{r create_descriptive_summary}
+descriptive_summary <- cubes %>%
+  dplyr::group_by(.data$year, .data$species, .data$sim) %>%
+  dplyr::summarise(n_occs = sum(.data$n),
+                   mean_unc = mean(.data$min_coord_uncertainty),
+                   max_n = max(.data$n)) %>%
+  dplyr::summarise(n_occs = sum(n_occs)/n_cubes,
+                   mean_unc = mean(mean_unc),
+                   mean_max_n = mean(max_n),
+                   .groups = "drop")
+ggplot2::ggplot(descriptive_summary) +
+  geom_point(aes(x = .data$mean_max_n, y = .data$mean_unc, color = n_occs)) +
+  scale_x_continuous(trans='log10')
+```
+
+## Scattered and precise occurrences
+
+Examples of year/species combination with highly scattered occurrences (low `mean_max_n`) and low coordinate uncertainty (low `mean_unc`):
+
+```{r examples_scattered_precise_occs}
+descriptive_summary %>%
+  dplyr::filter(mean_max_n < 10) %>%
+  dplyr::filter(mean_unc < 250) %>%
+  distinct(year, species, n_occs, mean_max_n, mean_unc)
+```
+
+```{r define_year_species_scattered_low_unc}
+scattered_low_unc <- list(year = 2016, species = "Reynoutria sachalinensis")
+scattered_low_unc_circles_4326 <- 
+  occ_reynoutria_circles_4326 %>%
+  dplyr::filter(year == scattered_low_unc$year,
+                species == scattered_low_unc$species)
+```
+
+We choose year = `r scattered_low_unc$year`, species = `r scattered_low_unc$species` combination. As you can see in the leaflet below, the data are really scattered and precise, almost all circles fall entirely within a square:
+
+```{r leaflet_scattered_low_unc}
+scattered_low_unc_cells <- get_cells_around_circles(
+  grid = be_grid_4326, 
+  circles = scattered_low_unc_circles_4326
+)
+leaflet::leaflet(scattered_low_unc_circles_4326) %>%
+  leaflet::addTiles() %>%
+  leaflet::addPolygons() %>%
+  leaflet::addPolygons(data = scattered_low_unc_cells,
+                       color = "green", 
+                       weight = 1, 
+                       opacity = 0.3)
+```
+
+## Scattered and imprecise occurrences
+
+We take now an example of year/species combination with scattered and imprecise occurrences
+
+```{r examples_scattered_imprecise_occs}
+descriptive_summary %>%
+  dplyr::filter(mean_max_n < 10) %>%
+  dplyr::filter(mean_unc > 750) %>%
+  distinct(year, species, n_occs, mean_max_n, mean_unc)
+```
+
+```{r define_year_species_scattered_high_unc}
+scattered_high_unc <- list(year = 2011, species = "Reynoutria bohemica")
+scattered_high_unc_circles_4326 <- 
+  occ_reynoutria_circles_4326 %>%
+  dplyr::filter(year == scattered_high_unc$year,
+                species == scattered_high_unc$species)
+```
+
+We choose year = `r scattered_low_unc$year`, species = `r scattered_low_unc$species` combination:
+
+```{r leaflet_scattered_high_unc}
+scattered_high_unc_cells <- get_cells_around_circles(
+  grid = be_grid_4326, 
+  circles = scattered_high_unc_circles_4326
+)
+leaflet::leaflet(scattered_high_unc_circles_4326) %>%
+  leaflet::addTiles() %>%
+  leaflet::addPolygons() %>%
+  leaflet::addPolygons(data = scattered_high_unc_cells, 
+                       color = "green", 
+                       weight = 1, 
+                       opacity = 0.3)
+
+```
+
+## Dense and precise occurrences
+
+Examples of year/species combination with dense occurrences (high `mean_max_n`) and low coordinate uncertainty (low `mean_unc`):
+
+```{r examples_dense_precise_occs}
+descriptive_summary %>%
+  dplyr::filter(mean_max_n > 50) %>%
+  dplyr::filter(mean_unc < 250) %>%
+  distinct(year, species, n_occs, mean_max_n, mean_unc)
+```
+
+```{r define_year_species_dense_low_unc}
+dense_low_unc <- list(year = 2018, species = "Reynoutria japonica")
+dense_low_unc_circles_4326 <- 
+  occ_reynoutria_circles_4326 %>%
+  dplyr::filter(year == dense_low_unc$year,
+                species == dense_low_unc$species)
+```
+
+We choose year = `r dense_low_unc$year`, species = `r dense_low_unc$species` combination:
+
+```{r leaflet_dense_low_unc}
+dense_low_unc_cells <- get_cells_around_circles(
+  grid = be_grid_4326, 
+  circles = dense_low_unc_circles_4326
+)
+leaflet::leaflet(dense_low_unc_circles_4326) %>%
+  leaflet::addTiles() %>%
+  leaflet::addPolygons() %>%
+  leaflet::addPolygons(data = dense_low_unc_cells, 
+                       color = "green", 
+                       weight = 1, 
+                       opacity = 0.3)
+```
+
+## Dense and imprecise occurrences
+
+We take now an example of year/species combination with scattered and imprecise occurrences
+
+```{r examples_dense_imprecise_occs}
+descriptive_summary %>%
+  dplyr::filter(mean_max_n > 50) %>%
+  dplyr::filter(mean_unc > 750) %>%
+  distinct(year, species, n_occs, mean_max_n, mean_unc)
+```
+
+```{r define_year_species_scattered_high_unc}
+dense_high_unc <- list(year = 2013, species = "Reynoutria japonica")
+dense_high_unc_circles_4326 <- 
+  occ_reynoutria_circles_4326 %>%
+  dplyr::filter(year == dense_high_unc$year,
+                species == dense_high_unc$species)
+```
+
+We choose year = `r dense_high_unc$year`, species = `r dense_high_unc$species` combination:
+
+```{r leaflet_dense_high_unc}
+dense_high_unc_cells <- get_cells_around_circles(
+  grid = be_grid_4326, 
+  circles = dense_high_unc_circles_4326
+)
+leaflet::leaflet(dense_high_unc_circles_4326) %>%
+  leaflet::addTiles() %>%
+  leaflet::addPolygons() %>%
+  leaflet::addPolygons(data = dense_high_unc_cells, 
+                       color = "green", 
+                       weight = 1, 
+                       opacity = 0.3,
+                       fillOpacity = 0.1)
+```
+
+Summary of the 4 use cases:
+
+```{r}
+use_cases <- list("scattered_high_unc" = scattered_high_unc, 
+                  "scattered_low_unc" = scattered_low_unc,
+                  "dense_high_unc" = dense_high_unc, 
+                  "dense_low_unc" = dense_low_unc)
+use_cases_df <- bind_rows(use_cases)
+use_cases_df$use_case <- names(use_cases)
+use_cases_df
+```
+
+
+# Visualize the observed occupancy
+
+We also visualize the distribution of occupied grid cells over all simulations.
+
+```{r hist_occupancy}
+n_occupied_cells <- cubes %>%
+  mutate(occupancy = ifelse(n == 0, 0, 1)) %>%
+  group_by(year, species, sim) %>%
+  summarise(n = sum(occupancy)) %>%
+  right_join(use_cases_df,
+              by = c("year", "species")
+)
+```
+
+
+```{r plot_distr_n_occupied_cells}
+n_occupied_cells %>%
+  ggplot(aes(x = n)) + 
+  geom_bar() +
+  labs(x = "number of occupied grid cells",
+       y = "frequency") +
+  scale_x_continuous(breaks = scales::extended_breaks()) + 
+  facet_wrap(~ use_case, scales = "free")
+```
+
+We can take the average of the distribution with an 95 % confidence interval by bootstrapping.
+
+```{r plotdistribution_average,95_confidence_bootstrapping}
+average_distr <- purrr::map(use_cases_df$use_case,
+            function(x) {
+              g <- 
+                n_occupied_cells %>%
+                dplyr::filter(.data$use_case == x) %>%
+                ggplot(aes(x = interaction(year, species, sep = " - "), y = n)) +
+                ggplot2::stat_summary(fun.data = "mean_cl_boot") +
+                ggplot2::labs(x = "", y = "number of occupied grid cells")
+              d <- ggplot_build(g)$data[[1]]
+              d$use_case <- x
+              return(list(plot = g, data = d, use_case = x))
+            }
+)
+```
+
+The obtained average distribution is quite stable:
+
+```{r}
+average_distr_data_df <- purrr::map_dfr(
+  average_distr, ~.$data) %>%
+  dplyr::select(y, ymin, ymax, use_case) %>%
+  dplyr::left_join(use_cases_df, by = "use_case") %>%
+  dplyr::relocate(year, species, use_case, dplyr::everything())
+average_distr_data_df
+```
+
+# Convergence
+
+Can we speak about convergence of a certain statistics? And how many cubes do we need to get at such stable situation?
+
+## Statistics: meean number of occurrences per grid cell
+
+Select some cells for each of the use cases:
+
+```{r select_cells_example}
+year_species_cells_df <- cubes %>%
+  dplyr::filter(sim == 1) %>%
+  dplyr::right_join(use_cases_df, by = c("year", "species")) %>%
+  dplyr::group_by(year, species, use_case) %>%
+  dplyr::filter(.data$n == max(.data$n) | .data$n == round(mean(.data$n)) |
+           .data$n == min(.data$n)) %>% 
+  dplyr::group_by(year, species, n, use_case) %>%
+  dplyr::slice(1:2) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(year, eea_cell_code, speciesKey, species)
+year_species_cells_df
+```
+
+The mean number of occurrences per grid cell seems surprisingly very stable since beginning:
+
+```{r convergence}
+cum_mean_cubes_df <- cubes %>%
+  right_join(use_cases_df, by = c("year", "species")) %>%
+  group_by(year, species, use_case, eea_cell_code) %>%
+  arrange(year, species, use_case, eea_cell_code, sim) %>%
+  mutate(mean_n = cummean(n)) %>%
+  ungroup()
+
+cum_mean_cubes_df %>%
+  right_join(year_species_cells_df, 
+             by = c("year", "speciesKey", "species", "eea_cell_code")) %>%
+  ggplot(aes(x = sim, y = mean_n, colour = as.factor(eea_cell_code), 
+             group = interaction(year, species, eea_cell_code))) +
+  geom_line() +
+    labs(x = "number of simulations",
+         y = "mean number of\noccurrences per grid cell")
+```
+
+## Grid statistics
+
+How variable is the total number of occupied grid cells (observed occupancy)?
+
+```{r}
+
+```
+
