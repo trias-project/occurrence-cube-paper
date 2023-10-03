@@ -9,7 +9,7 @@ library(tidylog)
 
 
 #read EEA grid of Belgium
-be_grid <- st_read("../pipeline/data/external/utm1_bel")
+be_grid <- st_read("../indicators/data/external/utm1_bel")
 
 key <- "0011257-200127171203522"
 zip_filename <- paste0(key, ".zip")
@@ -141,6 +141,14 @@ occ_reynoutria <-
               1000.0,
               coordinateUncertaintyInMeters)
   )
+
+# Save intermediate file
+write_tsv(occ_reynoutria,
+          here::here("data",
+                     "interim",
+                     "reynoutria_filtered.tsv"),
+          na = ""
+)
 
 # Save decimalLatitude` and `decimalLongitude` and coordinate uncertainty,
 # `coordinateUncertaintyInMeters` as `geodata_df`
