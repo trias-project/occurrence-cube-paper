@@ -651,3 +651,31 @@ cum_occupancy_df %>%
          y = "number of occupied grid cells",
          colour = "threshold")
 ```
+
+We zoom around the thresholds 0.3 - 0.5 which result in an observed occupancy of 7 cells, found as the mean value (see histogram above):
+
+```{r}
+cum_occupancy_df %>%
+  mutate(occupancy_30 = ifelse(p >= 0.3, 1, 0),
+         occupancy_40 = ifelse(p >= 0.4, 1, 0),
+         occupancy_50 = ifelse(p >= 0.5, 1, 0)) %>% 
+  group_by(sim) %>%
+  summarise(across(starts_with("occupancy_"), sum)) %>%
+  pivot_longer(cols = starts_with("occupancy_"), 
+               names_to = "threshold", values_to = "n") %>%
+  separate(col = threshold, into = c("name", "threshold")) %>%
+  mutate(threshold = factor(as.numeric(threshold) / 100, ordered = TRUE)) %>%
+  select(-name) %>%
+  ggplot(aes(x = sim, y = n, colour = threshold, group = threshold)) +
+  geom_line(size = 1.5) +
+  scale_x_log10(breaks = c(0,1,2,5,10,30,50,100,1000)) +
+  scale_y_continuous(breaks = seq(0,12,1), limits = c(0, 12)) + 
+  labs(x = "number of simulations", 
+       y = "number of occupied grid cells",
+       colour = "threshold") +
+  facet_wrap(~ threshold) +
+  theme(strip.text = element_text(size = 20),
+        axis.text.x = element_text(size = 14, angle = 45),
+        axis.text.y = element_text(size = 14))
+```
+
